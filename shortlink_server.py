@@ -6,6 +6,11 @@ import asyncio
 from threading import Lock
 import discord
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
 
 app = Flask(__name__)
 bot_instance = None

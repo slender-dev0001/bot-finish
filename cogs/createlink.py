@@ -3,6 +3,11 @@ from discord.ext import commands
 import sqlite3
 import secrets
 from urllib.parse import urlparse
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
 
 class CreateLink(commands.Cog):
     def __init__(self, bot):
@@ -61,7 +66,7 @@ class CreateLink(commands.Cog):
             conn.commit()
             conn.close()
 
-            short_url = f"http://localhost:5001/link/{short_id}"
+            short_url = f"{BASE_URL}/link/{short_id}"
             embed = discord.Embed(
                 title="✅ Lien créé avec succès",
                 color=discord.Color.green()
@@ -122,7 +127,7 @@ class CreateLink(commands.Cog):
             conn.close()
 
             user = await self.bot.fetch_user(user_id)
-            short_url = f"http://localhost:5001/link/{short_id}"
+            short_url = f"{BASE_URL}/link/{short_id}"
             embed = discord.Embed(
                 title="🔗 Lien trouvé",
                 color=discord.Color.blue()
@@ -184,7 +189,7 @@ class CreateLink(commands.Cog):
             )
             
             for short_id, url, clicks, created_at in links:
-                short_url = f"http://localhost:5001/link/{short_id}"
+                short_url = f"{BASE_URL}/link/{short_id}"
                 embed.add_field(
                     name=f"`{short_id}`",
                     value=f"**Lien:** {short_url}\n**Cible:** {url}\n**Clics:** {clicks}",
