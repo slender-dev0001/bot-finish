@@ -16,6 +16,8 @@ import secrets
 
 load_dotenv()
 BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
+if not BASE_URL.startswith(('http://', 'https://')):
+    BASE_URL = f'https://{BASE_URL}'
 DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID', '')
 DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET', '')
 DISCORD_REDIRECT_URI = f'{BASE_URL}/auth/callback'
