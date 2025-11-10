@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from datetime import datetime
 import requests
+import json
 
 class Utility(commands.Cog):
     def __init__(self, bot):
@@ -166,6 +167,165 @@ class Utility(commands.Cog):
                 color=discord.Color.red()
             )
             await ctx.send(embed=embed)
+
+    @commands.command(name='searchname')
+    async def searchname(self, ctx, firstname: str, lastname: str):
+        try:
+            await ctx.send("🔍 Recherche OSINT en cours... Les résultats vous seront envoyés en DM")
+            
+            results_found = False
+            embed = discord.Embed(
+                title=f"🔍 Résultats OSINT: {firstname} {lastname}",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            
+            try:
+                email = f"{firstname.lower()}.{lastname.lower()}@"
+                response = requests.get(
+                    'https://api.holehe.com/email_exists',
+                    params={'email': email},
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data:
+                        embed.add_field(name="📧 Recherche par Email", value=f"Résultats trouvés", inline=False)
+                        results_found = True
+            except:
+                pass
+            
+            try:
+                response = requests.get(
+                    f'https://api.epieos.com/email-finder?name={firstname}+{lastname}',
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('email'):
+                        email_found = data.get('email')
+                        confidence = data.get('confidence', 'N/A')
+                        embed.add_field(
+                            name="📧 Email Trouvé",
+                            value=f"`{email_found}`\n**Confiance:** {confidence}%",
+                            inline=False
+                        )
+                        results_found = True
+                        
+                        try:
+                            hibp_response = requests.get(
+                                f'https://haveibeenpwned.com/api/v3/breachedaccount/{email_found}',
+                                headers={'User-Agent': 'Discord Bot'},
+                                timeout=5
+                            )
+                            if hibp_response.status_code == 200:
+                                breaches = hibp_response.json()
+                                breach_names = [b['Name'] for b in breaches[:5]]
+                                embed.add_field(
+                                    name="⚠️ Fuites de Données",
+                                    value=f"Trouvé dans {len(breaches)} fuite(s):\n" + "\n".join(breach_names),
+                                    inline=False
+                                )
+                        except:
+                            pass
+            except:
+                pass
+            
+            try:
+                response = requests.get(
+                    f'https://api.hunter.io/v2/domain-search?domain=linkedin.com&limit=10',
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('data'):
+                        similar_names = [p['value'] for p in data.get('data', [])[:3] if f"{firstname.lower()}" in p['value'].lower() or f"{lastname.lower()}" in p['value'].lower()]
+                        if similar_names:
+                            embed.add_field(
+                                name="👤 Profils Similaires",
+                                value="\n".join(similar_names[:3]),
+                                inline=False
+                            )
+                            results_found = True
+            except:
+                pass
+            
+            try:
+                response = requests.get(
+                    f'https://nominatim.openstreetmap.org/search?q={firstname}+{lastname}&format=json&limit=5',
+                    headers={'User-Agent': 'Discord Bot'},
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data:
+                        locations = [f"{d.get('display_name', 'Unknown')}" for d in data[:3]]
+                        if locations:
+                            embed.add_field(
+                                name="📍 Emplacements Publics",
+                                value="\n".join(locations),
+                                inline=False
+                            )
+                            results_found = True
+            except:
+                pass
+            
+            try:
+                username_search = firstname.lower() + lastname.lower()
+                sites_to_check = ['twitter', 'instagram', 'github', 'reddit', 'tiktok', 'youtube']
+                found_accounts = []
+                
+                for site in sites_to_check:
+                    try:
+                        if site == 'github':
+                            url = f'https://api.github.com/users/{username_search}'
+                        elif site == 'twitter':
+                            url = f'https://twitter.com/i/web/status/1'
+                        else:
+                            url = f'https://{site}.com/{username_search}'
+                        
+                        response = requests.head(url, timeout=3)
+                        if response.status_code < 404:
+                            found_accounts.append(site.capitalize())
+                    except:
+                        pass
+                
+                if found_accounts:
+                    embed.add_field(
+                        name="🌐 Comptes Trouvés",
+                        value=", ".join(found_accounts),
+                        inline=False
+                    )
+                    results_found = True
+            except:
+                pass
+            
+            if not results_found:
+                embed.add_field(
+                    name="📭 Aucun Résultat",
+                    value="Aucune information trouvée pour cette personne",
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="⚠️ Avertissement Légal",
+                value="Ces données sont publiques. Respect de la vie privée obligatoire.",
+                inline=False
+            )
+            embed.set_footer(text="OSINT Search | Données de sources publiques")
+            
+            await ctx.author.send(embed=embed)
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la recherche: {str(e)}",
+                color=discord.Color.red()
+            )
+            try:
+                await ctx.author.send(embed=embed)
+            except:
+                await ctx.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Utility(bot))

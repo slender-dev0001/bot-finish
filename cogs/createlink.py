@@ -5,6 +5,7 @@ import secrets
 from urllib.parse import urlparse
 import os
 from dotenv import load_dotenv
+from shortlink_server import click_codes
 
 load_dotenv()
 BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
@@ -201,6 +202,139 @@ class CreateLink(commands.Cog):
             embed = discord.Embed(
                 title="❌ Erreur",
                 description=f"Erreur lors de la récupération de vos liens: {e}",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+
+    @commands.command(name='linkclick')
+    async def linkclick(self, ctx, code: str):
+        if code not in click_codes:
+            embed = discord.Embed(
+                title="❌ Code Invalide",
+                description=f"Le code `{code}` n'existe pas ou a expiré",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        data = click_codes[code]
+        creator_id = data['user_id']
+        short_id = data['short_id']
+        ip_address = data['ip_address']
+        browser = data['browser']
+        device_type = data['device_type']
+        user_agent_str = data['user_agent_str']
+        
+        embed = discord.Embed(
+            title="✅ Visite Enregistrée!",
+            description=f"Votre visite sur le lien **{short_id}** a été enregistrée",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="👤 Utilisateur", value=ctx.author.mention, inline=True)
+        embed.add_field(name="📱 Appareil", value=device_type, inline=True)
+        embed.add_field(name="🌐 Navigateur", value=browser, inline=True)
+        embed.add_field(name="🔗 Code", value=f"`{code}`", inline=False)
+        embed.add_field(name="⏰ Heure", value=f"<t:{int(data['timestamp'].timestamp())}:F>", inline=False)
+        
+        await ctx.send(embed=embed)
+        
+        try:
+            creator = await self.bot.fetch_user(creator_id)
+            notification = discord.Embed(
+                title="📊 Nouvelle Visite Enregistrée!",
+                description=f"{ctx.author.mention} a cliqué sur ton lien!",
+                color=discord.Color.blue()
+            )
+            notification.add_field(name="🔗 ID du lien", value=f"`{short_id}`", inline=False)
+            notification.add_field(name="👤 Visiteur", value=f"{ctx.author.name}#{ctx.author.discriminator}", inline=True)
+            notification.add_field(name="📱 Appareil", value=device_type, inline=True)
+            notification.add_field(name="🌐 Navigateur", value=browser, inline=True)
+            notification.add_field(name="🔍 Adresse IP", value=f"```{ip_address}```", inline=False)
+            notification.add_field(name="⏰ Heure", value=f"<t:{int(data['timestamp'].timestamp())}:F>", inline=False)
+            
+            await creator.send(embed=notification)
+        except:
+            pass
+        
+        del click_codes[code]
+
+    @commands.command(name='linkvisits')
+    async def linkvisits(self, ctx, short_id: str):
+        try:
+            conn = sqlite3.connect("links.db")
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT user_id FROM custom_links WHERE id = ?
+            ''', (short_id,))
+            
+            link_result = cursor.fetchone()
+            if not link_result:
+                embed = discord.Embed(
+                    title="❌ Lien non trouvé",
+                    description=f"Le lien `{short_id}` n'existe pas",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=embed)
+                conn.close()
+                return
+            
+            link_owner_id = link_result[0]
+            if link_owner_id != ctx.author.id and ctx.author.id != 817179893256192020:
+                embed = discord.Embed(
+                    title="❌ Accès refusé",
+                    description="Vous n'êtes pas le propriétaire de ce lien",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=embed)
+                conn.close()
+                return
+            
+            cursor.execute('''
+                SELECT visitor_id, visitor_name, ip_address, browser, device_type, country, region, city, timestamp
+                FROM link_visits
+                WHERE short_id = ?
+                ORDER BY timestamp DESC
+            ''', (short_id,))
+            
+            visits = cursor.fetchall()
+            conn.close()
+            
+            if not visits:
+                embed = discord.Embed(
+                    title="📭 Aucune visite",
+                    description=f"Le lien `{short_id}` n'a pas encore reçu de visite authentifiée",
+                    color=discord.Color.orange()
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            embed = discord.Embed(
+                title=f"📊 Visites du lien `{short_id}`",
+                description=f"Total: {len(visits)} visite(s)",
+                color=discord.Color.blue()
+            )
+            
+            for idx, (visitor_id, visitor_name, ip_address, browser, device_type, country, region, city, timestamp) in enumerate(visits[:10], 1):
+                visitor_info = f"**{visitor_name}** (`{visitor_id}`)\n"
+                visitor_info += f"📱 {device_type} | 🌐 {browser}\n"
+                visitor_info += f"📍 {city}, {region}, {country}\n"
+                visitor_info += f"🔗 {ip_address}"
+                
+                embed.add_field(
+                    name=f"Visite #{idx}",
+                    value=visitor_info,
+                    inline=False
+                )
+            
+            if len(visits) > 10:
+                embed.set_footer(text=f"Affichage des 10 premières visites sur {len(visits)}")
+            
+            await ctx.send(embed=embed)
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la récupération des visites: {str(e)}",
                 color=discord.Color.red()
             )
             await ctx.send(embed=embed)

@@ -175,8 +175,14 @@ class Commands(commands.Cog):
         )
         
         embed.add_field(
-            name="🔗 **Liens Courts**",
-            value="`+createlink <url>` Créer un lien court\n`+getlink <id>` Récupérer un lien\n`+mylinks` Voir vos liens",
+            name="🔗 **Liens Courts & Suivi**",
+            value="`+createlink <url>` Créer un lien court\n`+getlink <id>` Récupérer un lien\n`+mylinks` Voir vos liens\n`+linkvisits <id>` 📊 Voir les visiteurs authentifiés (OAuth2)",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔍 **OSINT & Recherche**",
+            value="`+searchip <ip>` Géolocalisation d'une IP\n`+searchname <prénom> <nom>` 🕵️ Recherche OSINT par nom (résultats en DM)",
             inline=False
         )
         
