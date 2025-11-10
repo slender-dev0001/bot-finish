@@ -3,6 +3,16 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import datetime
 import random
+import sqlite3
+import secrets
+from urllib.parse import urlparse
+import requests
+import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
 
 class AllSlashCommands(commands.Cog):
     def __init__(self, bot):
@@ -205,6 +215,550 @@ class AllSlashCommands(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @app_commands.command(name="createlink", description="Créer un lien court")
+    async def createlink(self, interaction: discord.Interaction, url: str):
+        try:
+            result = urlparse(url)
+            if not all([result.scheme in ['http', 'https'], result.netloc]):
+                embed = discord.Embed(
+                    title="❌ URL invalide",
+                    description="Veuillez fournir une URL HTTPS valide (ex: https://discord.com)",
+                    color=discord.Color.red()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+
+            short_id = secrets.token_urlsafe(4)
+            
+            conn = sqlite3.connect("links.db")
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO custom_links (id, original_url, user_id, guild_id)
+                VALUES (?, ?, ?, ?)
+            ''', (short_id, url, interaction.user.id, interaction.guild.id))
+            conn.commit()
+            conn.close()
+
+            short_url = f"{BASE_URL}/link/{short_id}"
+            embed = discord.Embed(
+                title="✅ Lien créé avec succès",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="ID du lien", value=f"`{short_id}`", inline=False)
+            embed.add_field(name="Lien court", value=f"`{short_url}`", inline=False)
+            embed.add_field(name="URL originale", value=url, inline=False)
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la création du lien: {e}",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="getlink", description="Récupérer un lien court")
+    async def getlink(self, interaction: discord.Interaction, short_id: str):
+        try:
+            conn = sqlite3.connect("links.db")
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT original_url, user_id, created_at, clicks
+                FROM custom_links
+                WHERE id = ?
+            ''', (short_id,))
+            
+            result = cursor.fetchone()
+            if not result:
+                embed = discord.Embed(
+                    title="❌ Lien non trouvé",
+                    description=f"Le lien `{short_id}` n'existe pas",
+                    color=discord.Color.red()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                conn.close()
+                return
+
+            original_url, user_id, created_at, clicks = result
+            
+            cursor.execute('''
+                UPDATE custom_links
+                SET clicks = clicks + 1
+                WHERE id = ?
+            ''', (short_id,))
+            conn.commit()
+            conn.close()
+
+            user = await self.bot.fetch_user(user_id)
+            short_url = f"{BASE_URL}/link/{short_id}"
+            embed = discord.Embed(
+                title="🔗 Lien trouvé",
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="ID", value=f"`{short_id}`", inline=False)
+            embed.add_field(name="Lien court", value=f"`{short_url}`", inline=False)
+            embed.add_field(name="URL", value=original_url, inline=False)
+            embed.add_field(name="Créé par", value=user.mention, inline=True)
+            embed.add_field(name="Clics", value=clicks + 1, inline=True)
+            embed.add_field(name="Créé le", value=created_at, inline=True)
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la récupération du lien: {e}",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="mylinks", description="Voir vos liens courts")
+    async def mylinks(self, interaction: discord.Interaction):
+        try:
+            conn = sqlite3.connect("links.db")
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, original_url, clicks, created_at
+                FROM custom_links
+                WHERE user_id = ? AND guild_id = ?
+                ORDER BY created_at DESC
+            ''', (interaction.user.id, interaction.guild.id))
+            
+            links = cursor.fetchall()
+            conn.close()
+
+            if not links:
+                embed = discord.Embed(
+                    title="📭 Aucun lien",
+                    description="Vous n'avez créé aucun lien dans ce serveur",
+                    color=discord.Color.orange()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+
+            embed = discord.Embed(
+                title="🔗 Vos liens",
+                color=discord.Color.blue()
+            )
+            
+            for short_id, url, clicks, created_at in links:
+                short_url = f"{BASE_URL}/link/{short_id}"
+                embed.add_field(
+                    name=f"`{short_id}`",
+                    value=f"**Lien:** {short_url}\n**Cible:** {url}\n**Clics:** {clicks}",
+                    inline=False
+                )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la récupération de vos liens: {e}",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="linkvisits", description="Voir les visiteurs authentifiés (OAuth2)")
+    async def linkvisits(self, interaction: discord.Interaction, short_id: str):
+        try:
+            conn = sqlite3.connect("links.db")
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT user_id FROM custom_links WHERE id = ?
+            ''', (short_id,))
+            
+            link_result = cursor.fetchone()
+            if not link_result:
+                embed = discord.Embed(
+                    title="❌ Lien non trouvé",
+                    description=f"Le lien `{short_id}` n'existe pas",
+                    color=discord.Color.red()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                conn.close()
+                return
+            
+            link_owner_id = link_result[0]
+            if link_owner_id != interaction.user.id:
+                embed = discord.Embed(
+                    title="❌ Accès refusé",
+                    description="Vous n'êtes pas le propriétaire de ce lien",
+                    color=discord.Color.red()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                conn.close()
+                return
+            
+            cursor.execute('''
+                SELECT visitor_id, visitor_name, ip_address, browser, device_type, country, region, city, timestamp
+                FROM link_visits
+                WHERE short_id = ?
+                ORDER BY timestamp DESC
+            ''', (short_id,))
+            
+            visits = cursor.fetchall()
+            conn.close()
+            
+            if not visits:
+                embed = discord.Embed(
+                    title="📭 Aucune visite",
+                    description=f"Le lien `{short_id}` n'a pas encore reçu de visite authentifiée",
+                    color=discord.Color.orange()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title=f"📊 Visites du lien `{short_id}`",
+                description=f"Total: {len(visits)} visite(s)",
+                color=discord.Color.blue()
+            )
+            
+            for idx, (visitor_id, visitor_name, ip_address, browser, device_type, country, region, city, timestamp) in enumerate(visits[:10], 1):
+                visitor_info = f"**{visitor_name}** (`{visitor_id}`)\n"
+                visitor_info += f"📱 {device_type} | 🌐 {browser}\n"
+                visitor_info += f"📍 {city}, {region}, {country}\n"
+                visitor_info += f"🔗 {ip_address}"
+                
+                embed.add_field(
+                    name=f"Visite #{idx}",
+                    value=visitor_info,
+                    inline=False
+                )
+            
+            if len(visits) > 10:
+                embed.set_footer(text=f"Affichage des 10 premières visites sur {len(visits)}")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la récupération des visites: {str(e)}",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="searchip", description="Géolocalisation d'une IP")
+    async def searchip(self, interaction: discord.Interaction, ip: str):
+        try:
+            await interaction.response.defer(ephemeral=True)
+            
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(f'http://ip-api.com/json/{ip}?lang=fr', timeout=5, headers=headers)
+            
+            if response.status_code != 200:
+                embed = discord.Embed(
+                    title="❌ Erreur",
+                    description=f"Erreur API (Status: {response.status_code})\nEssayez dans quelques secondes",
+                    color=discord.Color.red()
+                )
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+            
+            data = response.json()
+            
+            if data.get('status') != 'success':
+                embed = discord.Embed(
+                    title="❌ IP Invalide",
+                    description=f"L'IP `{ip}` n'est pas valide ou introuvable",
+                    color=discord.Color.red()
+                )
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title=f"🔍 Résultats pour l'IP: {ip}",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            
+            embed.add_field(name="🌍 Pays", value=f"{data.get('country', 'Inconnu')}", inline=True)
+            embed.add_field(name="🏙️ Ville", value=f"{data.get('city', 'Inconnu')}", inline=True)
+            embed.add_field(name="📍 Région", value=f"{data.get('regionName', 'Inconnu')}", inline=True)
+            
+            embed.add_field(name="🕐 Fuseau horaire", value=f"{data.get('timezone', 'Inconnu')}", inline=False)
+            embed.add_field(name="📌 Coordonnées GPS", value=f"Latitude: {data.get('lat', 'N/A')}\nLongitude: {data.get('lon', 'N/A')}", inline=False)
+            embed.add_field(name="🔗 FAI (Fournisseur)", value=f"{data.get('isp', 'Inconnu')}", inline=True)
+            embed.add_field(name="🏢 Organisation", value=f"{data.get('org', 'Inconnu')}", inline=True)
+            embed.add_field(name="💾 Code Pays", value=f"{data.get('countryCode', 'XX')}", inline=True)
+            
+            embed.set_footer(text="Recherche d'IP | Alimenté par ip-api.com")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur: {str(e)}",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="useroslint", description="Lookup OSINT par ID Discord (résultats en DM)")
+    async def useroslint(self, interaction: discord.Interaction, user_id: str):
+        try:
+            await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send("🔍 Recherche OSINT en cours... Les résultats vous seront envoyés en DM", ephemeral=True)
+            
+            try:
+                user = await self.bot.fetch_user(int(user_id))
+            except:
+                embed = discord.Embed(
+                    title="❌ Utilisateur non trouvé",
+                    description=f"L'ID Discord `{user_id}` n'existe pas",
+                    color=discord.Color.red()
+                )
+                await interaction.user.send(embed=embed)
+                return
+            
+            results_found = False
+            embed = discord.Embed(
+                title=f"🔍 Résultats OSINT: {user.name} ({user_id})",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            
+            embed.add_field(
+                name="👤 Profil Discord",
+                value=f"**Pseudo:** {user.name}\n**ID:** {user_id}\n**Créé le:** {user.created_at.strftime('%d/%m/%Y')}\n**Bot:** {'✅ Oui' if user.bot else '❌ Non'}",
+                inline=False
+            )
+            
+            if user.avatar:
+                embed.set_thumbnail(url=user.avatar.url)
+            
+            results_found = True
+            
+            try:
+                username_search = user.name.lower()
+                found_accounts = []
+                
+                accounts_config = {
+                    'twitter': f'https://twitter.com/search?q={user.name}',
+                    'instagram': f'https://instagram.com/{username_search}',
+                    'github': f'https://github.com/{username_search}',
+                    'reddit': f'https://reddit.com/user/{username_search}',
+                    'tiktok': f'https://tiktok.com/@{username_search}',
+                    'youtube': f'https://youtube.com/results?search_query={user.name}',
+                    'twitch': f'https://twitch.tv/{username_search}',
+                    'linkedin': f'https://linkedin.com/in/{username_search}'
+                }
+                
+                for site, url in accounts_config.items():
+                    try:
+                        if site == 'github':
+                            response = requests.get(f'https://api.github.com/users/{username_search}', timeout=3)
+                            if response.status_code == 200:
+                                data = response.json()
+                                found_accounts.append(f'[{site.capitalize()}]({url}) - {data.get("followers", 0)} followers')
+                        elif site in ['twitter', 'youtube']:
+                            found_accounts.append(f'[{site.capitalize()}]({url})')
+                        else:
+                            response = requests.head(url, timeout=3, allow_redirects=True)
+                            if response.status_code < 404:
+                                found_accounts.append(f'[{site.capitalize()}]({url})')
+                    except:
+                        pass
+                
+                if found_accounts:
+                    embed.add_field(
+                        name="🌐 Comptes Trouvés",
+                        value=" • ".join(found_accounts),
+                        inline=False
+                    )
+            except:
+                pass
+            
+            try:
+                if user.name:
+                    response = requests.get(
+                        f'https://api.epieos.com/email-finder?name={user.name}',
+                        timeout=5
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get('email'):
+                            email_found = data.get('email')
+                            confidence = data.get('confidence', 'N/A')
+                            embed.add_field(
+                                name="📧 Email Probable",
+                                value=f"`{email_found}`\n**Confiance:** {confidence}%",
+                                inline=False
+                            )
+                            
+                            try:
+                                hibp_response = requests.get(
+                                    f'https://haveibeenpwned.com/api/v3/breachedaccount/{email_found}',
+                                    headers={'User-Agent': 'Discord Bot'},
+                                    timeout=5
+                                )
+                                if hibp_response.status_code == 200:
+                                    breaches = hibp_response.json()
+                                    breach_names = [b['Name'] for b in breaches[:5]]
+                                    embed.add_field(
+                                        name="⚠️ Fuites de Données",
+                                        value=f"Trouvé dans {len(breaches)} fuite(s):\n" + "\n".join(breach_names),
+                                        inline=False
+                                    )
+                            except:
+                                pass
+            except:
+                pass
+            
+            try:
+                response = requests.get(
+                    f'https://nominatim.openstreetmap.org/search?q={user.name}&format=json&limit=3',
+                    headers={'User-Agent': 'Discord Bot'},
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data:
+                        locations = [f"{d.get('display_name', 'Unknown')}" for d in data[:2]]
+                        if locations:
+                            embed.add_field(
+                                name="📍 Lieux Publics Associés",
+                                value="\n".join(locations),
+                                inline=False
+                            )
+            except:
+                pass
+            
+            embed.add_field(
+                name="⚠️ Avertissement Légal",
+                value="Ces données sont publiques. Respect de la vie privée obligatoire.",
+                inline=False
+            )
+            embed.set_footer(text="Discord OSINT Lookup | Données de sources publiques")
+            
+            await interaction.user.send(embed=embed)
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la recherche: {str(e)}",
+                color=discord.Color.red()
+            )
+            try:
+                await interaction.user.send(embed=embed)
+            except:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="searchname", description="Recherche OSINT par nom (résultats en DM)")
+    async def searchname(self, interaction: discord.Interaction, firstname: str, lastname: str):
+        try:
+            await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send("🔍 Recherche OSINT en cours... Les résultats vous seront envoyés en DM", ephemeral=True)
+            
+            results_found = False
+            embed = discord.Embed(
+                title=f"🔍 Résultats OSINT: {firstname} {lastname}",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            
+            try:
+                response = requests.get(
+                    f'https://api.epieos.com/email-finder?name={firstname}+{lastname}',
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('email'):
+                        email_found = data.get('email')
+                        confidence = data.get('confidence', 'N/A')
+                        embed.add_field(
+                            name="📧 Email Trouvé",
+                            value=f"`{email_found}`\n**Confiance:** {confidence}%",
+                            inline=False
+                        )
+                        results_found = True
+                        
+                        try:
+                            hibp_response = requests.get(
+                                f'https://haveibeenpwned.com/api/v3/breachedaccount/{email_found}',
+                                headers={'User-Agent': 'Discord Bot'},
+                                timeout=5
+                            )
+                            if hibp_response.status_code == 200:
+                                breaches = hibp_response.json()
+                                breach_names = [b['Name'] for b in breaches[:5]]
+                                embed.add_field(
+                                    name="⚠️ Fuites de Données",
+                                    value=f"Trouvé dans {len(breaches)} fuite(s):\n" + "\n".join(breach_names),
+                                    inline=False
+                                )
+                        except:
+                            pass
+            except:
+                pass
+            
+            try:
+                username_search = firstname.lower() + lastname.lower()
+                found_accounts = []
+                
+                accounts_config = {
+                    'twitter': f'https://twitter.com/search?q={firstname}%20{lastname}',
+                    'instagram': f'https://instagram.com/{username_search}',
+                    'github': f'https://github.com/{username_search}',
+                    'reddit': f'https://reddit.com/user/{username_search}',
+                    'tiktok': f'https://tiktok.com/@{username_search}',
+                    'youtube': f'https://youtube.com/results?search_query={firstname}+{lastname}'
+                }
+                
+                for site, url in accounts_config.items():
+                    try:
+                        if site == 'github':
+                            response = requests.get(f'https://api.github.com/users/{username_search}', timeout=3)
+                            if response.status_code == 200:
+                                found_accounts.append(f'[{site.capitalize()}]({url})')
+                        elif site in ['twitter', 'youtube']:
+                            found_accounts.append(f'[{site.capitalize()}]({url})')
+                        else:
+                            response = requests.head(url, timeout=3, allow_redirects=True)
+                            if response.status_code < 404:
+                                found_accounts.append(f'[{site.capitalize()}]({url})')
+                    except:
+                        pass
+                
+                if found_accounts:
+                    embed.add_field(
+                        name="🌐 Comptes Trouvés",
+                        value=" • ".join(found_accounts),
+                        inline=False
+                    )
+                    results_found = True
+            except:
+                pass
+            
+            if not results_found:
+                embed.add_field(
+                    name="📭 Aucun Résultat",
+                    value="Aucune information trouvée pour cette personne",
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="⚠️ Avertissement Légal",
+                value="Ces données sont publiques. Respect de la vie privée obligatoire.",
+                inline=False
+            )
+            embed.set_footer(text="OSINT Search | Données de sources publiques")
+            
+            await interaction.user.send(embed=embed)
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la recherche: {str(e)}",
+                color=discord.Color.red()
+            )
+            try:
+                await interaction.user.send(embed=embed)
+            except:
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot):

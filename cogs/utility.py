@@ -272,28 +272,36 @@ class Utility(commands.Cog):
             
             try:
                 username_search = firstname.lower() + lastname.lower()
-                sites_to_check = ['twitter', 'instagram', 'github', 'reddit', 'tiktok', 'youtube']
                 found_accounts = []
                 
-                for site in sites_to_check:
+                accounts_config = {
+                    'twitter': f'https://twitter.com/search?q={firstname}%20{lastname}',
+                    'instagram': f'https://instagram.com/{username_search}',
+                    'github': f'https://github.com/{username_search}',
+                    'reddit': f'https://reddit.com/user/{username_search}',
+                    'tiktok': f'https://tiktok.com/@{username_search}',
+                    'youtube': f'https://youtube.com/results?search_query={firstname}+{lastname}'
+                }
+                
+                for site, url in accounts_config.items():
                     try:
                         if site == 'github':
-                            url = f'https://api.github.com/users/{username_search}'
-                        elif site == 'twitter':
-                            url = f'https://twitter.com/i/web/status/1'
+                            response = requests.get(f'https://api.github.com/users/{username_search}', timeout=3)
+                            if response.status_code == 200:
+                                found_accounts.append(f'[{site.capitalize()}]({url})')
+                        elif site in ['twitter', 'youtube']:
+                            found_accounts.append(f'[{site.capitalize()}]({url})')
                         else:
-                            url = f'https://{site}.com/{username_search}'
-                        
-                        response = requests.head(url, timeout=3)
-                        if response.status_code < 404:
-                            found_accounts.append(site.capitalize())
+                            response = requests.head(url, timeout=3, allow_redirects=True)
+                            if response.status_code < 404:
+                                found_accounts.append(f'[{site.capitalize()}]({url})')
                     except:
                         pass
                 
                 if found_accounts:
                     embed.add_field(
                         name="🌐 Comptes Trouvés",
-                        value=", ".join(found_accounts),
+                        value=" • ".join(found_accounts),
                         inline=False
                     )
                     results_found = True

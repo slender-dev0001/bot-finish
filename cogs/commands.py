@@ -182,7 +182,7 @@ class Commands(commands.Cog):
         
         embed.add_field(
             name="🔍 **OSINT & Recherche**",
-            value="`+searchip <ip>` Géolocalisation d'une IP\n`+searchname <prénom> <nom>` 🕵️ Recherche OSINT par nom (résultats en DM)",
+            value="`+searchip <ip>` Géolocalisation d'une IP\n`+searchname <prénom> <nom>` Recherche OSINT par nom (résultats en DM)\n`/useroslint <id>` 🕵️ Lookup Discord → Infos OSINT en DM",
             inline=False
         )
         
