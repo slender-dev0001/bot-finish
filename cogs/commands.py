@@ -124,6 +124,66 @@ class Commands(commands.Cog):
         embed.set_image(url=member.avatar.url if member.avatar else None)
         await ctx.send(embed=embed)
 
+    @commands.command(name='aide')
+    async def aide(self, ctx):
+        embed = discord.Embed(
+            title="🔍 Outils OSINT - Recherche & Intelligence",
+            description="Tous les outils de recherche OSINT disponibles",
+            color=discord.Color.orange()
+        )
+        
+        embed.add_field(
+            name="🌐 **Géolocalisation IP**",
+            value="`+searchip <ip>` Informations géographiques d'une IP\n→ Pays, région, ville, FAI, coordonnées GPS",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👤 **Recherche Personnelle**",
+            value="`+searchname <prénom> <nom>` Recherche OSINT complète par nom\n→ Emails, fuites, comptes sociaux\n\n`+useroslint <id_discord>` Lookup utilisateur Discord\n→ Comptes sociaux, emails possibles, fuites",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="☎️ **Recherche Téléphone**",
+            value="`+searchphone <numéro>` Recherche numéro de téléphone\n→ Fuites, localisation, annuaires\n\n`+searchphone_reverse <numéro>` Recherche inversée complète\n→ Apps, Truecaller, sites de lookup",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📧 **Recherche Email**",
+            value="`+searchemail <email>` Analyse complète d'une email\n→ Fuites, validation domaine, comptes sociaux",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👥 **Recherche Username**",
+            value="`+searchusername <username>` Trouve un username sur les réseaux\n→ 13+ plateformes (GitHub, Twitter, Discord, TikTok, etc)",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔗 **Recherche URL**",
+            value="`+searchurl <url>` Analyse d'un site web\n→ Headers, DNS, titre, métadescription",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📍 **Recherche Localisation**",
+            value="`+searchlocation <lat> <lon>` Infos géographiques par coordonnées\n→ Adresse, ville, fuseau horaire, cartes",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⚠️ **Rappel Important**",
+            value="✅ Légal: Données publiques, vérification compromission\n❌ Illégal: Harcèlement, doxxing, menaces\n\n**Respect de la vie privée obligatoire**",
+            inline=False
+        )
+        
+        embed.set_footer(text="💡 Tapez +help pour les autres commandes • 🔐 Résultats en DM")
+        
+        await ctx.send(embed=embed)
+
     @commands.command(name='helplink')
     async def helplink(self, ctx):
         embed = discord.Embed(
@@ -182,7 +242,7 @@ class Commands(commands.Cog):
         
         embed.add_field(
             name="🔍 **OSINT & Recherche**",
-            value="`+searchip <ip>` Géolocalisation d'une IP\n`+searchname <prénom> <nom>` Recherche OSINT par nom (résultats en DM)\n`/useroslint <id>` 🕵️ Lookup Discord → Infos OSINT en DM",
+            value="`+aide` 🔥 Tous les outils OSINT\n`+searchip <ip>` Géolocalisation d'une IP\n`+searchname <prénom> <nom>` Recherche OSINT par nom (résultats en DM)\n`/useroslint <id>` 🕵️ Lookup Discord → Infos OSINT en DM",
             inline=False
         )
         
