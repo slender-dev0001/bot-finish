@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import requests
 import json
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -659,79 +660,107 @@ class AllSlashCommands(commands.Cog):
                 timestamp=datetime.now()
             )
             
-            try:
-                response = requests.get(
-                    f'https://api.epieos.com/email-finder?name={firstname}+{lastname}',
-                    timeout=5
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('email'):
-                        email_found = data.get('email')
-                        confidence = data.get('confidence', 'N/A')
-                        embed.add_field(
-                            name="📧 Email Trouvé",
-                            value=f"`{email_found}`\n**Confiance:** {confidence}%",
-                            inline=False
-                        )
-                        results_found = True
-                        
-                        try:
-                            hibp_response = requests.get(
-                                f'https://haveibeenpwned.com/api/v3/breachedaccount/{email_found}',
-                                headers={'User-Agent': 'Discord Bot'},
-                                timeout=5
-                            )
-                            if hibp_response.status_code == 200:
-                                breaches = hibp_response.json()
-                                breach_names = [b['Name'] for b in breaches[:5]]
-                                embed.add_field(
-                                    name="⚠️ Fuites de Données",
-                                    value=f"Trouvé dans {len(breaches)} fuite(s):\n" + "\n".join(breach_names),
-                                    inline=False
-                                )
-                        except:
-                            pass
-            except:
-                pass
+            email_found = None
             
-            try:
-                username_search = firstname.lower() + lastname.lower()
-                found_accounts = []
-                
-                accounts_config = {
-                    'twitter': f'https://twitter.com/search?q={firstname}%20{lastname}',
-                    'instagram': f'https://instagram.com/{username_search}',
-                    'github': f'https://github.com/{username_search}',
-                    'reddit': f'https://reddit.com/user/{username_search}',
-                    'tiktok': f'https://tiktok.com/@{username_search}',
-                    'youtube': f'https://youtube.com/results?search_query={firstname}+{lastname}'
-                }
-                
-                for site, url in accounts_config.items():
+            email_patterns = [
+                f"{firstname.lower()}.{lastname.lower()}@gmail.com",
+                f"{firstname.lower()}{lastname.lower()}@gmail.com",
+                f"{firstname[0].lower()}{lastname.lower()}@gmail.com",
+                f"{firstname.lower()}.{lastname.lower()}@outlook.com",
+                f"{firstname.lower()}{lastname.lower()}@outlook.com",
+                f"{firstname.lower()}.{lastname.lower()}@yahoo.com",
+                f"{firstname.lower()}{lastname.lower()}@yahoo.com",
+                f"{firstname.lower()}.{lastname.lower()}@hotmail.com",
+                f"{firstname.lower()}@{lastname.lower()}.com",
+            ]
+            
+            breached_emails = []
+            for email in email_patterns:
+                try:
+                    hibp_response = requests.get(
+                        f'https://haveibeenpwned.com/api/v3/breachedaccount/{email}',
+                        headers={'User-Agent': 'Discord Bot OSINT'},
+                        timeout=5
+                    )
+                    if hibp_response.status_code == 200:
+                        breaches = hibp_response.json()
+                        breach_count = len(breaches)
+                        breached_emails.append((email, breach_count))
+                    time.sleep(1)
+                except:
+                    pass
+            
+            if breached_emails:
+                emails_text = "\n".join([f"`{e[0]}` - **{e[1]} fuite(s)**" for e in breached_emails])
+                embed.add_field(
+                    name="📧 Emails Trouvés dans les Fuites",
+                    value=emails_text,
+                    inline=False
+                )
+                results_found = True
+            else:
+                embed.add_field(
+                    name="📧 Emails",
+                    value="❌ Aucun email trouvé dans les bases de données compromises",
+                    inline=False
+                )
+                results_found = True
+            
+            username_search = firstname.lower() + lastname.lower()
+            found_accounts = []
+            
+            username_variants = [
+                firstname.lower() + lastname.lower(),
+                firstname.lower() + "." + lastname.lower(),
+                firstname[0].lower() + lastname.lower(),
+                firstname.lower() + lastname[0].lower()
+            ]
+            
+            for username in username_variants:
+                try:
+                    response = requests.get(f'https://api.github.com/users/{username}', timeout=3)
+                    if response.status_code == 200:
+                        data = response.json()
+                        github_url = data.get('html_url', f'https://github.com/{username}')
+                        found_accounts.append((f'[🐙 GitHub]({github_url})', username, 0))
+                        break
+                except:
+                    pass
+            
+            base_checks = {
+                'twitter': lambda u: (f'https://twitter.com/{u}', None),
+                'instagram': lambda u: (f'https://instagram.com/{u}', None),
+                'reddit': lambda u: (f'https://reddit.com/user/{u}', f'https://www.reddit.com/user/{u}/about.json'),
+                'tiktok': lambda u: (f'https://tiktok.com/@{u}', None),
+                'twitch': lambda u: (f'https://twitch.tv/{u}', None),
+                'youtube': lambda u: (f'https://youtube.com/@{u}', None),
+            }
+            
+            for site, url_func in base_checks.items():
+                for username in username_variants:
                     try:
-                        if site == 'github':
-                            response = requests.get(f'https://api.github.com/users/{username_search}', timeout=3)
+                        url, api_url = url_func(username)
+                        if site == 'reddit' and api_url:
+                            response = requests.get(api_url, headers={'User-Agent': 'Discord Bot'}, timeout=3)
                             if response.status_code == 200:
-                                found_accounts.append(f'[{site.capitalize()}]({url})')
-                        elif site in ['twitter', 'youtube']:
-                            found_accounts.append(f'[{site.capitalize()}]({url})')
+                                found_accounts.append((f'[🔴 {site.capitalize()}]({url})', username, 0))
+                                break
                         else:
                             response = requests.head(url, timeout=3, allow_redirects=True)
                             if response.status_code < 404:
-                                found_accounts.append(f'[{site.capitalize()}]({url})')
+                                found_accounts.append((f'[🌐 {site.capitalize()}]({url})', username, 0))
+                                break
                     except:
                         pass
-                
-                if found_accounts:
-                    embed.add_field(
-                        name="🌐 Comptes Trouvés",
-                        value=" • ".join(found_accounts),
-                        inline=False
-                    )
-                    results_found = True
-            except:
-                pass
+            
+            if found_accounts:
+                accounts_text = " • ".join([acc[0] for acc in found_accounts[:8]])
+                embed.add_field(
+                    name="🌐 Comptes Trouvés",
+                    value=accounts_text,
+                    inline=False
+                )
+                results_found = True
             
             if not results_found:
                 embed.add_field(
@@ -746,6 +775,174 @@ class AllSlashCommands(commands.Cog):
                 inline=False
             )
             embed.set_footer(text="OSINT Search | Données de sources publiques")
+            
+            await interaction.user.send(embed=embed)
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=f"Erreur lors de la recherche: {str(e)}",
+                color=discord.Color.red()
+            )
+            try:
+                await interaction.user.send(embed=embed)
+            except:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="useroslint", description="Recherche OSINT par Discord ID (résultats en DM)")
+    async def useroslint(self, interaction: discord.Interaction, user_id: str):
+        try:
+            await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send("🔍 Recherche OSINT en cours... Les résultats vous seront envoyés en DM", ephemeral=True)
+            
+            try:
+                user_id_int = int(user_id)
+            except:
+                embed = discord.Embed(
+                    title="❌ ID Invalide",
+                    description="L'ID Discord doit être un nombre",
+                    color=discord.Color.red()
+                )
+                await interaction.user.send(embed=embed)
+                return
+            
+            try:
+                user = await self.bot.fetch_user(user_id_int)
+            except:
+                embed = discord.Embed(
+                    title="❌ Utilisateur Non Trouvé",
+                    description=f"L'utilisateur avec l'ID `{user_id}` n'existe pas",
+                    color=discord.Color.red()
+                )
+                await interaction.user.send(embed=embed)
+                return
+            
+            results_found = False
+            embed = discord.Embed(
+                title=f"🔍 OSINT Discord: {user}",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            
+            embed.add_field(
+                name="👤 Informations Discord",
+                value=f"**Username:** {user.name}\n**ID:** `{user.id}`\n**Created:** {user.created_at.strftime('%d/%m/%Y')}",
+                inline=False
+            )
+            
+            if user.avatar:
+                embed.set_thumbnail(url=user.avatar.url)
+            
+            results_found = True
+            
+            email_found = None
+            
+            email_patterns = [
+                f"{user.name.lower()}@gmail.com",
+                f"{user.name.lower().replace(' ', '.')}@gmail.com",
+                f"{user.name.lower().replace(' ', '')}@gmail.com",
+                f"{user.name.lower()}@outlook.com",
+                f"{user.name.lower().replace(' ', '')}@outlook.com",
+                f"{user.name.lower()}@yahoo.com",
+                f"{user.name.lower().replace(' ', '')}@yahoo.com",
+                f"{user.name.lower()}@hotmail.com",
+            ]
+            
+            for email in email_patterns:
+                try:
+                    hibp_response = requests.get(
+                        f'https://haveibeenpwned.com/api/v3/breachedaccount/{email}',
+                        headers={'User-Agent': 'Discord Bot'},
+                        timeout=5
+                    )
+                    if hibp_response.status_code == 200:
+                        email_found = email
+                        embed.add_field(
+                            name="📧 Email Trouvé",
+                            value=f"`{email_found}`",
+                            inline=False
+                        )
+                        break
+                except:
+                    pass
+            
+            if email_found:
+                try:
+                    hibp_response = requests.get(
+                        f'https://haveibeenpwned.com/api/v3/breachedaccount/{email_found}',
+                        headers={'User-Agent': 'Discord Bot'},
+                        timeout=5
+                    )
+                    if hibp_response.status_code == 200:
+                        breaches = hibp_response.json()
+                        breach_names = [b['Name'] for b in breaches[:5]]
+                        embed.add_field(
+                            name="⚠️ Fuites de Données",
+                            value=f"Trouvé dans {len(breaches)} fuite(s):\n" + "\n".join(breach_names),
+                            inline=False
+                        )
+                except:
+                    pass
+            
+            username_variants = [
+                user.name.lower(),
+                user.name.lower().replace(" ", ""),
+                user.name.lower().replace("_", ""),
+            ]
+            
+            found_accounts = []
+            
+            for username in username_variants:
+                try:
+                    response = requests.get(f'https://api.github.com/users/{username}', timeout=3)
+                    if response.status_code == 200:
+                        data = response.json()
+                        github_url = data.get('html_url', f'https://github.com/{username}')
+                        found_accounts.append(f'[🐙 GitHub]({github_url})')
+                        break
+                except:
+                    pass
+            
+            base_checks = {
+                'twitter': lambda u: (f'https://twitter.com/{u}', None),
+                'instagram': lambda u: (f'https://instagram.com/{u}', None),
+                'reddit': lambda u: (f'https://reddit.com/user/{u}', f'https://www.reddit.com/user/{u}/about.json'),
+                'tiktok': lambda u: (f'https://tiktok.com/@{u}', None),
+                'twitch': lambda u: (f'https://twitch.tv/{u}', None),
+                'youtube': lambda u: (f'https://youtube.com/@{u}', None),
+            }
+            
+            for site, url_func in base_checks.items():
+                for username in username_variants:
+                    try:
+                        url, api_url = url_func(username)
+                        if site == 'reddit' and api_url:
+                            response = requests.get(api_url, headers={'User-Agent': 'Discord Bot'}, timeout=3)
+                            if response.status_code == 200:
+                                found_accounts.append(f'[🔴 {site.capitalize()}]({url})')
+                                break
+                        else:
+                            response = requests.head(url, timeout=3, allow_redirects=True)
+                            if response.status_code < 404:
+                                found_accounts.append(f'[🌐 {site.capitalize()}]({url})')
+                                break
+                    except:
+                        pass
+            
+            if found_accounts:
+                accounts_text = " • ".join(found_accounts[:8])
+                embed.add_field(
+                    name="🌐 Comptes Trouvés",
+                    value=accounts_text,
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="⚠️ Avertissement Légal",
+                value="Ces données sont publiques. Respect de la vie privée obligatoire.",
+                inline=False
+            )
+            embed.set_footer(text="Discord OSINT | Données de sources publiques")
             
             await interaction.user.send(embed=embed)
             

