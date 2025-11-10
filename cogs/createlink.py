@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from shortlink_server import click_codes
 
 load_dotenv()
-BASE_URL = os.getenv('BASE_URL', 'https://bot-finish-production.up.railway.app')
+BASE_URL = os.getenv('BASE_URL', 'https://googg.up.railway.app')
 if BASE_URL and not BASE_URL.startswith(('http://', 'https://')):
     BASE_URL = f'https://{BASE_URL}'
 
