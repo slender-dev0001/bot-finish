@@ -222,6 +222,10 @@ def record_visit(short_id, visitor_id, visitor_name, ip_address, browser, device
     except Exception as e:
         pass
 
+@app.route('/')
+def home():
+    return "✅ Serveur de liens courts actif!", 200
+
 @app.route('/auth/callback')
 def auth_callback():
     code = request.args.get('code')
