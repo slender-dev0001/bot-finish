@@ -193,9 +193,13 @@ class CreateLink(commands.Cog):
             
             for short_id, url, clicks, created_at in links[:25]:
                 short_url = f"{BASE_URL}/link/{short_id}"
+                url_display = url[:500] + "..." if len(url) > 500 else url
+                field_value = f"**Lien:** {short_url}\n**Cible:** {url_display}\n**Clics:** {clicks}"
+                if len(field_value) > 1024:
+                    field_value = field_value[:1020] + "..."
                 embed.add_field(
                     name=f"`{short_id}`",
-                    value=f"**Lien:** {short_url}\n**Cible:** {url}\n**Clics:** {clicks}",
+                    value=field_value,
                     inline=False
                 )
             
