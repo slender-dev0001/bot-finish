@@ -223,12 +223,120 @@ class Commands(commands.Cog):
         )
         
         embed.add_field(
+            name="🌐 **DNS & Records**",
+            value="`+dnsrecords <domaine>` Récupère les records DNS\n→ A, AAAA, MX, CNAME, TXT",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📧 **Vérification Email**",
+            value="`+emailverify <email>` Vérifie la validité d'un email\n→ Format, domaine, MX records",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔐 **Crack Hash**",
+            value="`+hashcrack <hash>` Analyse un hash\n→ Type (MD5, SHA-1, SHA-256, SHA-512) + liens crack",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔒 **Scanner Ports**",
+            value="`+portscan <ip>` Scanne les ports courants\n→ HTTP, HTTPS, SSH, FTP, MySQL, etc",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📊 **Plage IP**",
+            value="`+iprange <ip_début> <ip_fin>` Infos d'une plage\n→ Calcule total IPs, première/dernière",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔄 **Générateur IP**",
+            value="`+ipgen [nombre]` Génère IPs aléatoires\n→ Vérifie chaque IP générée (max 100)",
+            inline=False
+        )
+        
+        embed.add_field(
             name="⚠️ **Rappel Important**",
             value="✅ Légal: Données publiques, vérification compromission\n❌ Illégal: Harcèlement, doxxing, menaces\n\n**Respect de la vie privée obligatoire**",
             inline=False
         )
         
         embed.set_footer(text="💡 Tapez +help pour les autres commandes • 🔐 Résultats en DM")
+        
+        await ctx.send(embed=embed)
+
+    @commands.command(name='googlehint')
+    async def googlehint(self, ctx):
+        embed = discord.Embed(
+            title="🔍 Google Dorking - Guide Complet",
+            description="Techniques avancées de recherche Google pour l'OSINT",
+            color=discord.Color.red()
+        )
+        
+        embed.add_field(
+            name="🎯 **Syntaxe de Base**",
+            value="`site:` Limiter à un site\n`intitle:` Chercher dans le titre\n`inurl:` Chercher dans l'URL\n`intext:` Chercher dans le texte",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📁 **Fichiers & Types**",
+            value="`filetype:pdf` Documents PDF\n`filetype:doc` Documents Word\n`filetype:xls` Feuilles Excel\n`filetype:ppt` Présentations\n`filetype:zip` Archives\n`filetype:sql` Bases de données",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔗 **Opérateurs Avancés**",
+            value="`\"exact phrase\"` Recherche exacte\n`word1 OR word2` Ou (OR)\n`word1 -word2` Exclure (NOT)\n`*` Joker (remplace des mots)",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👤 **Recherche Personnelle**",
+            value="`site:facebook.com \"prénom nom\"` Facebook\n`site:linkedin.com \"prénom nom\"` LinkedIn\n`site:twitter.com username` Twitter\n`site:instagram.com username` Instagram",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📧 **Email & Contact**",
+            value="`inurl:contact site:example.com` Pages de contact\n`\"email@example.com\"` Email spécifique\n`intext:\"@example.com\" filetype:pdf` Emails dans PDFs",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔐 **Configurations Dangereuses**",
+            value="`intitle:\"index of\"` Répertoires non protégés\n`inurl:admin inurl:login` Pages admin\n`intitle:\"Apache\" \"Index of\"` Serveurs exposés\n`inurl:.git` Repos Git exposés",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="💾 **Données Sensibles**",
+            value="`filetype:env` Fichiers .env (secrets)\n`filetype:sql intext:password` Bases de données\n`intext:\"password\" site:pastebin.com` Passwords leakés\n`filetype:conf` Fichiers de configuration",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🌐 **Informations Techniques**",
+            value="`inurl:robots.txt site:example.com` Fichier robots\n`inurl:sitemap.xml` Sitemaps\n`inurl:backup` Fichiers de backup\n`inurl:install.php` Scripts d'installation",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📊 **Exemples Pratiques**",
+            value="`site:linkedin.com \"CTO\" \"France\"` Trouver des CTOs\n`site:github.com \"api_key\"` Clés API exposées\n`\"@company.fr\" filetype:pdf` Documents de l'entreprise\n`inurl:webcam inurl:view.shtml` Webcams IoT",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⚠️ **Avertissement Légal**",
+            value="✅ **Légal**: Données publiques, recherche responsable\n❌ **Illégal**: Accès non autorisé, exploitation malveillante\n\n**Utilisation éthique obligatoire**",
+            inline=False
+        )
+        
+        embed.set_footer(text="💡 Consultez +aide pour tous les outils OSINT")
         
         await ctx.send(embed=embed)
 

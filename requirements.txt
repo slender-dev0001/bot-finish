@@ -9,3 +9,4 @@ requests==2.31.0
 beautifulsoup4==4.12.0
 python-whois==0.8.0
 exifread==3.0.0
+python-nmap==0.0.1

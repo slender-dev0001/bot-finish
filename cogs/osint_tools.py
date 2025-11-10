@@ -30,51 +30,82 @@ class OSINTTools(commands.Cog):
         loading_msg = await ctx.send(embed=loading_embed)
 
         try:
+            user_part, domain_part = email.split('@')
+            
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
             
-            email_encoded = email.replace('@', '%40')
-            search_url = f"https://www.google.com/search?q={email_encoded}"
-            response = requests.get(search_url, headers=headers, timeout=10)
+            urls_to_check = [
+                f"https://www.facebook.com/{user_part}",
+                f"https://twitter.com/{user_part}",
+                f"https://instagram.com/{user_part}",
+                f"https://github.com/{user_part}",
+                f"https://linkedin.com/in/{user_part}",
+                f"https://reddit.com/u/{user_part}",
+            ]
             
-            soup = BeautifulSoup(response.content, 'html.parser')
-            results = []
+            found_accounts = []
             
-            for result in soup.find_all('div', class_='yuRUbf'):
-                link = result.find('a')
-                if link:
-                    results.append(link.get('href'))
-            
-            if not results:
-                embed = discord.Embed(
-                    title="❌ Aucun résultat",
-                    description=f"Pas de comptes trouvés pour: **{email}**",
-                    color=discord.Color.orange()
-                )
-                await loading_msg.edit(embed=embed)
-                return
+            for url in urls_to_check:
+                try:
+                    resp = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
+                    if resp.status_code < 400:
+                        platform = url.split('/')[2].replace('www.', '').split('.')[0].upper()
+                        found_accounts.append((platform, url))
+                except:
+                    pass
             
             embed = discord.Embed(
-                title=f"📧 Résultats pour: {email}",
-                description=f"**{len(results[:5])} résultat(s)** trouvé(s)",
+                title=f"📧 Reverse Email: {email}",
                 color=discord.Color.green()
             )
             
-            for i, link in enumerate(results[:5], 1):
+            embed.add_field(
+                name="👤 Utilisateur",
+                value=user_part,
+                inline=True
+            )
+            
+            embed.add_field(
+                name="🌐 Domaine",
+                value=domain_part,
+                inline=True
+            )
+            
+            if found_accounts:
                 embed.add_field(
-                    name=f"Résultat {i}",
-                    value=f"[{link[:60]}...]({link})",
+                    name="✅ Comptes Trouvés",
+                    value=f"{len(found_accounts)} compte(s)",
+                    inline=True
+                )
+                
+                for platform, url in found_accounts:
+                    embed.add_field(
+                        name=f"🔗 {platform}",
+                        value=f"[Voir profil]({url})",
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="ℹ️ Résultat",
+                    value="Aucun compte trouvé sur les réseaux vérifiés",
                     inline=False
                 )
+            
+            embed.add_field(
+                name="🔍 Recherche Manuelle",
+                value="[Google](https://www.google.com/search?q=" + email.replace('@', '%40') + ")\n[Bing](https://www.bing.com/search?q=" + email.replace('@', '%40') + ")",
+                inline=False
+            )
             
             await loading_msg.edit(embed=embed)
 
         except Exception as e:
-            logger.error(f"Erreur reverseemail: {e}")
+            logger.error(f"Erreur reverseemail: {e}", exc_info=True)
             embed = discord.Embed(
                 title="❌ Erreur",
-                description=f"Une erreur est survenue: {str(e)[:100]}",
+                description="Une erreur est survenue",
                 color=discord.Color.red()
             )
             await loading_msg.edit(embed=embed)

@@ -4,6 +4,7 @@ import requests
 import logging
 import whois
 from datetime import datetime
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -114,78 +115,154 @@ class OSINTAdvanced(commands.Cog):
 
         loading_embed = discord.Embed(
             title="🔍 Recherche en cours...",
-            description=f"Localisation de: **{phone_number}**",
+            description=f"Analyse de: **{phone_number}**",
             color=discord.Color.blue()
         )
         loading_msg = await ctx.send(embed=loading_embed)
 
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            
             phone_prefix = phone[:2]
+            
             country_codes = {
-                '33': 'France 🇫🇷',
-                '32': 'Belgique 🇧🇪',
-                '41': 'Suisse 🇨🇭',
-                '49': 'Allemagne 🇩🇪',
-                '44': 'Royaume-Uni 🇬🇧',
-                '39': 'Italie 🇮🇹',
-                '34': 'Espagne 🇪🇸',
-                '31': 'Pays-Bas 🇳🇱',
-                '43': 'Autriche 🇦🇹',
-                '45': 'Danemark 🇩🇰',
+                '33': {'pays': 'France', '🇫🇷': 'France'},
+                '32': {'pays': 'Belgique', '🇧🇪': 'Belgique'},
+                '41': {'pays': 'Suisse', '🇨🇭': 'Suisse'},
+                '49': {'pays': 'Allemagne', '🇩🇪': 'Allemagne'},
+                '44': {'pays': 'Royaume-Uni', '🇬🇧': 'Royaume-Uni'},
+                '39': {'pays': 'Italie', '🇮🇹': 'Italie'},
+                '34': {'pays': 'Espagne', '🇪🇸': 'Espagne'},
+                '31': {'pays': 'Pays-Bas', '🇳🇱': 'Pays-Bas'},
+                '43': {'pays': 'Autriche', '🇦🇹': 'Autriche'},
+                '45': {'pays': 'Danemark', '🇩🇰': 'Danemark'},
+                '1': {'pays': 'États-Unis', '🇺🇸': 'États-Unis'},
             }
             
-            country = country_codes.get(phone_prefix, 'Pays inconnu')
+            operators_fr = {
+                '600': 'Orange',
+                '601': 'Orange',
+                '602': 'Orange',
+                '603': 'Orange',
+                '604': 'Orange',
+                '605': 'Orange',
+                '606': 'Orange',
+                '607': 'Orange',
+                '608': 'Orange',
+                '609': 'Orange',
+                '610': 'Orange',
+                '611': 'Orange',
+                '612': 'Orange',
+                '613': 'Orange',
+                '614': 'Orange',
+                '615': 'Orange',
+                '616': 'Orange',
+                '617': 'Orange',
+                '618': 'Orange',
+                '619': 'Orange',
+                '620': 'SFR',
+                '621': 'SFR',
+                '622': 'SFR',
+                '623': 'SFR',
+                '624': 'SFR',
+                '625': 'SFR',
+                '626': 'SFR',
+                '627': 'SFR',
+                '628': 'SFR',
+                '629': 'SFR',
+                '630': 'Bouygues',
+                '631': 'Bouygues',
+                '632': 'Bouygues',
+                '633': 'Bouygues',
+                '634': 'Bouygues',
+                '635': 'Bouygues',
+                '636': 'Bouygues',
+                '637': 'Bouygues',
+                '638': 'Bouygues',
+                '639': 'Bouygues',
+                '650': 'Free',
+                '651': 'Free',
+                '652': 'Free',
+                '653': 'Free',
+                '654': 'Free',
+                '655': 'Free',
+                '656': 'Free',
+                '657': 'Free',
+                '658': 'Free',
+                '659': 'Free',
+            }
             
-            search_url = f"https://www.google.com/search?q={phone_number}"
-            response = requests.get(search_url, headers=headers, timeout=10)
+            country_info = country_codes.get(phone_prefix, {'pays': 'Pays inconnu'})
+            country_name = country_info.get('pays', 'Inconnu')
             
-            soup = BeautifulSoup(response.content, 'html.parser')
-            results = soup.find_all('div', class_='yuRUbf')
+            operator = "Non identifié"
+            line_type = "Mobile"
+            
+            if phone_prefix == '33':
+                prefix_3 = phone[2:5]
+                operator = operators_fr.get(prefix_3, "Non identifié")
             
             embed = discord.Embed(
-                title=f"☎️ Infos pour: {phone_number}",
+                title=f"☎️ Analyse Numéro: {phone_number}",
                 color=discord.Color.green()
             )
             
             embed.add_field(
-                name="Format",
-                value=f"+{phone[:2]} {phone[2:]}",
+                name="📍 Pays",
+                value=f"{country_name}",
                 inline=True
             )
             
             embed.add_field(
-                name="Pays",
-                value=country,
+                name="🌍 Code Pays",
+                value=f"+{phone_prefix}",
                 inline=True
             )
             
             embed.add_field(
-                name="Longueur",
+                name="📏 Longueur",
                 value=f"{len(phone)} chiffres",
                 inline=True
             )
             
-            if results:
-                embed.add_field(
-                    name="Résultats Google",
-                    value=f"🔗 {len(results)} résultats trouvés",
-                    inline=False
-                )
+            embed.add_field(
+                name="📱 Type de Ligne",
+                value=line_type,
+                inline=True
+            )
             
             embed.add_field(
-                name="ℹ️ Informations",
-                value="Recherche sur données publiques\nPour plus de détails, utilisez Truecaller ou numlookup.com",
+                name="🏢 Opérateur",
+                value=operator,
+                inline=True
+            )
+            
+            embed.add_field(
+                name="✅ Validité",
+                value="À vérifier (format valide)",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="🔢 Format International",
+                value=f"+{phone[:2]} {phone[2:5]} {phone[5:8]} {phone[8:]}",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🔍 Recherche en Ligne",
+                value=f"**[Truecaller](https://www.truecaller.com/search/{phone})**\n**[NumLookup](https://www.numlookup.com/)**\n**[TrueCaller App](https://www.truecaller.com/)**",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚠️ Note",
+                value="Données basées sur le format du numéro\nPour plus de précision, utilisez Truecaller",
                 inline=False
             )
             
             await loading_msg.edit(embed=embed)
 
         except Exception as e:
-            logger.error(f"Erreur phonelocation: {e}")
+            logger.error(f"Erreur phonelocation: {e}", exc_info=True)
             embed = discord.Embed(
                 title="❌ Erreur",
                 description=f"Une erreur est survenue",
