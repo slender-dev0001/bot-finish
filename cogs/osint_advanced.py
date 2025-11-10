@@ -124,110 +124,71 @@ class OSINTAdvanced(commands.Cog):
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             
-            api_url = f"https://www.truecaller.com/api/v1/search?phone={phone}&countryCode=FR"
-            response = requests.get(api_url, headers=headers, timeout=10)
+            phone_prefix = phone[:2]
+            country_codes = {
+                '33': 'France 🇫🇷',
+                '32': 'Belgique 🇧🇪',
+                '41': 'Suisse 🇨🇭',
+                '49': 'Allemagne 🇩🇪',
+                '44': 'Royaume-Uni 🇬🇧',
+                '39': 'Italie 🇮🇹',
+                '34': 'Espagne 🇪🇸',
+                '31': 'Pays-Bas 🇳🇱',
+                '43': 'Autriche 🇦🇹',
+                '45': 'Danemark 🇩🇰',
+            }
             
-            if response.status_code == 200:
-                data = response.json()
-                
-                if 'data' in data and data['data']:
-                    result = data['data'][0]
-                    embed = discord.Embed(
-                        title=f"☎️ Infos pour: {phone_number}",
-                        color=discord.Color.green()
-                    )
-                    
-                    embed.add_field(
-                        name="Nom",
-                        value=result.get('name', 'N/A'),
-                        inline=True
-                    )
-                    
-                    embed.add_field(
-                        name="Pays",
-                        value=result.get('country', 'N/A'),
-                        inline=True
-                    )
-                    
-                    embed.add_field(
-                        name="Type",
-                        value=result.get('phoneType', 'N/A'),
-                        inline=True
-                    )
-                    
-                    if result.get('location'):
-                        embed.add_field(
-                            name="Localisation",
-                            value=result['location'],
-                            inline=False
-                        )
-                    
-                    await loading_msg.edit(embed=embed)
-                else:
-                    embed = discord.Embed(
-                        title="❌ Pas de résultats",
-                        description=f"Aucune info trouvée pour: **{phone_number}**",
-                        color=discord.Color.orange()
-                    )
-                    await loading_msg.edit(embed=embed)
-            else:
-                headers2 = {
-                    'User-Agent': 'Mozilla/5.0'
-                }
-                api_url2 = f"https://api.numverify.com/validate?number={phone}&country_code=FR"
-                response2 = requests.get(api_url2, headers=headers2, timeout=10)
-                
-                if response2.status_code == 200:
-                    data2 = response2.json()
-                    embed = discord.Embed(
-                        title=f"☎️ Infos pour: {phone_number}",
-                        color=discord.Color.green()
-                    )
-                    
-                    embed.add_field(
-                        name="Valide",
-                        value="✅ Oui" if data2.get('valid') else "❌ Non",
-                        inline=True
-                    )
-                    
-                    embed.add_field(
-                        name="Format",
-                        value=data2.get('format', 'N/A'),
-                        inline=True
-                    )
-                    
-                    embed.add_field(
-                        name="Opérateur",
-                        value=data2.get('carrier', 'N/A'),
-                        inline=True
-                    )
-                    
-                    embed.add_field(
-                        name="Type",
-                        value=data2.get('line_type', 'N/A'),
-                        inline=True
-                    )
-                    
-                    embed.add_field(
-                        name="Pays",
-                        value=data2.get('country_name', 'N/A'),
-                        inline=True
-                    )
-                    
-                    await loading_msg.edit(embed=embed)
-                else:
-                    embed = discord.Embed(
-                        title="❌ Erreur",
-                        description="Impossible de vérifier le numéro",
-                        color=discord.Color.red()
-                    )
-                    await loading_msg.edit(embed=embed)
+            country = country_codes.get(phone_prefix, 'Pays inconnu')
+            
+            search_url = f"https://www.google.com/search?q={phone_number}"
+            response = requests.get(search_url, headers=headers, timeout=10)
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            results = soup.find_all('div', class_='yuRUbf')
+            
+            embed = discord.Embed(
+                title=f"☎️ Infos pour: {phone_number}",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="Format",
+                value=f"+{phone[:2]} {phone[2:]}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Pays",
+                value=country,
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Longueur",
+                value=f"{len(phone)} chiffres",
+                inline=True
+            )
+            
+            if results:
+                embed.add_field(
+                    name="Résultats Google",
+                    value=f"🔗 {len(results)} résultats trouvés",
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="ℹ️ Informations",
+                value="Recherche sur données publiques\nPour plus de détails, utilisez Truecaller ou numlookup.com",
+                inline=False
+            )
+            
+            await loading_msg.edit(embed=embed)
 
         except Exception as e:
             logger.error(f"Erreur phonelocation: {e}")
             embed = discord.Embed(
                 title="❌ Erreur",
-                description=f"Une erreur est survenue: {str(e)[:100]}",
+                description=f"Une erreur est survenue",
                 color=discord.Color.red()
             )
             await loading_msg.edit(embed=embed)
