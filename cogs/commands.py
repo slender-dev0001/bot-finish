@@ -128,7 +128,7 @@ class Commands(commands.Cog):
     async def aide(self, ctx):
         embed = discord.Embed(
             title="🔍 Outils OSINT - Recherche & Intelligence",
-            description="Tous les outils de recherche OSINT disponibles",
+            description="**13+ Outils OSINT avancés** - Recherche, analyse, vérification",
             color=discord.Color.orange()
         )
         
@@ -171,6 +171,54 @@ class Commands(commands.Cog):
         embed.add_field(
             name="📍 **Recherche Localisation**",
             value="`+searchlocation <lat> <lon>` Infos géographiques par coordonnées\n→ Adresse, ville, fuseau horaire, cartes",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔍 **Recherche Email Avancée**",
+            value="`+reverseemail <email>` Trouve comptes associés à un email\n→ Résultats Google, comptes sociaux possibles",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👥 **Recherche Username Multi-Plateformes**",
+            value="`+socialmedia <username>` Cherche sur 12+ réseaux sociaux\n→ Twitter, Instagram, TikTok, GitHub, YouTube, Reddit, LinkedIn, Twitch, Discord, Snapchat, BeReal, Bluesky",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⚠️ **Vérifier les Fuites de Données**",
+            value="`+leaks <email ou téléphone>` Vérifie Have I Been Pwned\n→ Fuites connues, services compromis, dates",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🖼️ **Extraction Métadonnées Images**",
+            value="`+metadata` (joindre une image) Extrait EXIF\n→ Localisation GPS, appareil, date de prise de vue, etc",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🌐 **Google Dorking - Techniques Avancées**",
+            value="`+googlehint` Guide complet du Google dorking\n→ Syntaxe site, filetype, inurl, intitle, etc",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="☎️ **Localisation Numéro Téléphone**",
+            value="`+phonelocation <numéro>` Infos détaillées d'un téléphone\n→ Opérateur, type de ligne, localisation, nom",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🌐 **Whois - Infos Domaine**",
+            value="`+whois <domaine>` Infos complètes du domaine\n→ Registrar, dates création/expiration, Name Servers, propriétaire",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🖼️ **Recherche Images**",
+            value="`+searchimage <nom> <prénom>` Trouve images par nom\n→ Résultats Bing Image",
             inline=False
         )
         
