@@ -9,6 +9,8 @@ from shortlink_server import click_codes
 
 load_dotenv()
 BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
+if not BASE_URL.startswith(('http://', 'https://')):
+    BASE_URL = f'https://{BASE_URL}'
 
 class CreateLink(commands.Cog):
     def __init__(self, bot):
@@ -189,13 +191,16 @@ class CreateLink(commands.Cog):
                 color=discord.Color.blue()
             )
             
-            for short_id, url, clicks, created_at in links:
+            for short_id, url, clicks, created_at in links[:25]:
                 short_url = f"{BASE_URL}/link/{short_id}"
                 embed.add_field(
                     name=f"`{short_id}`",
                     value=f"**Lien:** {short_url}\n**Cible:** {url}\n**Clics:** {clicks}",
                     inline=False
                 )
+            
+            if len(links) > 25:
+                embed.set_footer(text=f"Affichage des 25 premiers liens sur {len(links)}")
             
             await ctx.send(embed=embed)
         except Exception as e:
