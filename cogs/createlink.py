@@ -12,6 +12,41 @@ BASE_URL = os.getenv('BASE_URL', 'https://googg.up.railway.app')
 if BASE_URL and not BASE_URL.startswith(('http://', 'https://')):
     BASE_URL = f'https://{BASE_URL}'
 
+class ImageNotificationView(discord.ui.View):
+    def __init__(self, creator, image_url):
+        super().__init__(timeout=None)
+        self.creator = creator
+        self.image_url = image_url
+        self.notified_users = set()
+
+    @discord.ui.button(label='🔔 Notifier', style=discord.ButtonStyle.primary)
+    async def notify_creator(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id in self.notified_users:
+            await interaction.response.send_message('🔁 Tu as déjà cliqué.', ephemeral=True)
+            return
+        self.notified_users.add(interaction.user.id)
+        dm_embed = discord.Embed(
+            title='🔔 Nouvelle interaction',
+            description=f"{interaction.user.mention} a cliqué sur ton image.",
+            color=discord.Color.blurple()
+        )
+        dm_embed.set_image(url=self.image_url)
+        if interaction.guild:
+            dm_embed.add_field(name='Serveur', value=interaction.guild.name, inline=True)
+        if interaction.channel and hasattr(interaction.channel, 'name'):
+            dm_embed.add_field(name='Salon', value=f"#{interaction.channel.name}", inline=True)
+        dm_embed.add_field(name='Utilisateur', value=f"{interaction.user.name}#{interaction.user.discriminator}", inline=False)
+        dm_embed.set_footer(text=f"ID: {interaction.user.id}")
+        dm_sent = True
+        try:
+            await self.creator.send(embed=dm_embed)
+        except Exception:
+            dm_sent = False
+        if dm_sent:
+            await interaction.response.send_message('🔔 Notification envoyée au créateur.', ephemeral=True)
+        else:
+            await interaction.response.send_message('⚠️ Impossible de notifier le créateur.', ephemeral=True)
+
 class CreateLink(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -88,6 +123,25 @@ class CreateLink(commands.Cog):
                 color=discord.Color.red()
             )
             await ctx.send(embed=embed)
+
+    @commands.command(name='createimage')
+    async def createimage(self, ctx, image_url: str):
+        if not self.is_valid_url(image_url):
+            embed = discord.Embed(
+                title="❌ URL invalide",
+                description="Fournis une URL d'image HTTPS valide",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+            return
+        embed = discord.Embed(
+            title="🖼️ Image interactive",
+            description="Clique sur le bouton pour notifier le créateur",
+            color=discord.Color.blurple()
+        )
+        embed.set_image(url=image_url)
+        view = ImageNotificationView(ctx.author, image_url)
+        await ctx.send(embed=embed, view=view)
 
     @commands.command(name='getlink')
     async def getlink(self, ctx, short_id: str):
