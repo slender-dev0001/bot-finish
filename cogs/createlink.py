@@ -8,9 +8,11 @@ from dotenv import load_dotenv
 from shortlink_server import click_codes
 
 load_dotenv()
-BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
-if not BASE_URL.startswith(('http://', 'https://')):
+BASE_URL = os.getenv('BASE_URL', '')
+if BASE_URL and not BASE_URL.startswith(('http://', 'https://')):
     BASE_URL = f'https://{BASE_URL}'
+if not BASE_URL:
+    BASE_URL = 'http://localhost:5001'
 
 class CreateLink(commands.Cog):
     def __init__(self, bot):
