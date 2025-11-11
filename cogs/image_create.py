@@ -172,7 +172,7 @@ class ImageCreate(commands.Cog):
                 # Créer l'embed de succès
                 embed = discord.Embed(
                     title="✅ Image Tracker Créée !",
-                    description="Votre image trackée est prête !",
+                    description="Votre image trackée est prête ! **Partagez le lien ci-dessous pour tracker les visiteurs.**",
                     color=discord.Color.green()
                 )
                 embed.add_field(
@@ -181,33 +181,46 @@ class ImageCreate(commands.Cog):
                     inline=False
                 )
                 embed.add_field(
-                    name="🔗 Lien Tracker",
-                    value=f"```{image_url}```",
+                    name="🔗 Lien Tracker (PARTAGEZ CE LIEN)",
+                    value=f"```{image_url}```\n⚠️ **Important:** Partagez uniquement ce lien pour tracker les visiteurs !",
                     inline=False
                 )
                 embed.add_field(
                     name="📊 Comment ça marche ?",
                     value=(
-                        "Partagez ce lien. Quand quelqu'un charge l'image, vous recevrez une notification DM avec :\n"
-                        "• 📍 **Adresse IP**\n"
-                        "• 🌍 **Localisation** (pays, région, ville)\n"
-                        "• 🖥️ **Navigateur et appareil**\n"
-                        "• 🕐 **Date et heure du clic**\n"
-                        "• 📊 **User-Agent complet**"
+                        "**1.** Copiez le lien tracker ci-dessus\n"
+                        "**2.** Partagez-le (Discord, messages, emails, etc.)\n"
+                        "**3.** Quand quelqu'un charge l'image via ce lien, vous recevrez :\n"
+                        "   • 📍 **Adresse IP complète**\n"
+                        "   • 🌍 **Localisation** (pays, région, ville)\n"
+                        "   • 🖥️ **Navigateur et système d'exploitation**\n"
+                        "   • 📱 **Type d'appareil**\n"
+                        "   • 🕐 **Date et heure du clic**\n"
+                        "   • 📊 **User-Agent complet**"
                     ),
                     inline=False
                 )
                 embed.add_field(
                     name="💡 Commandes utiles",
-                    value=f"`+imageclicks {tracker_id}` - Voir les statistiques\n`+imagestats` - Voir tous vos trackers",
+                    value=f"`+imageclicks {tracker_id}` - Voir les statistiques détaillées\n`+imagestats` - Voir tous vos trackers",
                     inline=False
                 )
                 embed.add_field(
-                    name="⚠️ Avertissement",
+                    name="⚠️ IMPORTANT - Comment partager l'image",
+                    value=(
+                        "**✅ CORRECT:** Partagez directement le lien tracker\n"
+                        "**❌ INCORRECT:** Ne copiez/collez PAS l'image depuis Discord\n"
+                        "**❌ INCORRECT:** Ne téléchargez PAS puis ré-uploadez l'image\n\n"
+                        "🔒 **Seul le lien tracker permet de recevoir les notifications !**"
+                    ),
+                    inline=False
+                )
+                embed.add_field(
+                    name="⚠️ Avertissement légal",
                     value="Cette fonctionnalité est à utiliser de manière **éthique et légale** uniquement. Ne l'utilisez pas pour harceler ou traquer quelqu'un.",
                     inline=False
                 )
-                embed.set_footer(text="Les notifications seront envoyées en DM")
+                embed.set_footer(text="Les notifications seront envoyées en DM • Bots Discord ignorés")
 
                 # Supprimer le message de chargement
                 await loading_msg.delete()
@@ -215,21 +228,10 @@ class ImageCreate(commands.Cog):
                 # Envoyer le résultat en DM
                 try:
                     await ctx.author.send(embed=embed)
-                    await ctx.send(f"✅ {ctx.author.mention} Image tracker créée ! Lien envoyé en DM.")
+                    await ctx.send(f"✅ {ctx.author.mention} Image tracker créée ! **Lien envoyé en DM** 📨\n💡 Partagez le lien pour tracker les visiteurs !")
                 except discord.Forbidden:
                     # Si les DM sont fermés, envoyer dans le canal
                     await ctx.send(embed=embed)
-
-                # Poster l'image dans le canal (optionnel)
-                if ctx.channel:
-                    public_embed = discord.Embed(
-                        title="🖼️ Nouvelle Image Trackée",
-                        description=f"**{title}**",
-                        color=discord.Color.blue(),
-                    )
-                    public_embed.set_image(url=image_url)
-                    public_embed.set_footer(text=f"Créé par {ctx.author.name} | ID: {tracker_id}")
-                    await ctx.channel.send(embed=public_embed)
 
             except UnidentifiedImageError:
                 await loading_msg.edit(content="❌ Impossible de lire cette image. Assurez-vous qu'il s'agit d'une image valide.")
