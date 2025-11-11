@@ -16,9 +16,9 @@ load_dotenv()
 DB_PATH = Path("links.db")
 
 def resolve_base_url() -> str:
-    raw_url = os.getenv("BASE_URL", "http://localhost:5001")
+    raw_url = os.getenv("BASE_URL", "googg.up.railway.app")
     if not raw_url:
-        return "http://localhost:5001"
+        return "googg.up.railway.app"
     parsed = urlparse(raw_url)
     if not parsed.scheme:
         return f"http://{raw_url}".rstrip("/")
