@@ -1,5 +1,6 @@
+import io
 import sqlite3
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, send_file
 from datetime import datetime
 from user_agents import parse
 import asyncio
@@ -24,6 +25,35 @@ def init_shortlink_db():
             clicks INTEGER DEFAULT 0
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS image_trackers (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            guild_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            clicks INTEGER DEFAULT 0,
+            image_data BLOB
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS image_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tracker_id TEXT NOT NULL,
+            ip_address TEXT,
+            browser TEXT,
+            device_type TEXT,
+            country TEXT,
+            region TEXT,
+            city TEXT,
+            user_agent TEXT,
+            clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tracker_id) REFERENCES image_trackers(id)
+        )
+    ''')
+    columns = {row[1] for row in cursor.execute("PRAGMA table_info(image_trackers)")}
+    if "image_data" not in columns:
+        cursor.execute("ALTER TABLE image_trackers ADD COLUMN image_data BLOB")
     conn.commit()
     conn.close()
 
@@ -115,6 +145,88 @@ async def notify_discord_shortlink(creator_id, short_id, ip_address, browser, de
         await creator.send(embed=embed)
     except Exception as e:
         pass
+
+async def notify_discord_image_click(owner_id, tracker_id, title, ip_address, browser, device_type, user_agent_str, ip_info):
+    if not bot_instance:
+        return
+    try:
+        owner = await bot_instance.fetch_user(owner_id)
+        embed = discord.Embed(
+            title="🖼️ Nouveau clic sur ton image",
+            description=f"L'image **{title}** a été ouverte 👀",
+            color=discord.Color.blurple(),
+            timestamp=datetime.now()
+        )
+        embed.add_field(name="ID du tracker", value=f"`{tracker_id}`", inline=False)
+        embed.add_field(name="Adresse IP", value=f"```{ip_address}```", inline=False)
+        embed.add_field(name="Navigateur", value=f"🌐 {browser}", inline=True)
+        embed.add_field(name="Appareil", value=f"📱 {device_type}", inline=True)
+        if ip_info:
+            embed.add_field(name="Pays", value=f"🌍 {ip_info.get('country', 'Inconnu')}", inline=True)
+            embed.add_field(name="Région", value=f"📍 {ip_info.get('region', 'Inconnu')}", inline=True)
+            embed.add_field(name="Ville", value=f"🏙️ {ip_info.get('city', 'Inconnu')}", inline=True)
+        embed.add_field(name="User-Agent", value=f"```{user_agent_str[:120]}```", inline=False)
+        embed.add_field(name="Horodatage", value=datetime.now().strftime("%d/%m/%Y à %H:%M:%S"), inline=False)
+        await owner.send(embed=embed)
+    except Exception:
+        pass
+
+@app.route('/image/<tracker_id>')
+def serve_tracked_image(tracker_id):
+    conn = sqlite3.connect("links.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT user_id, title, image_data
+        FROM image_trackers
+        WHERE id = ?
+    ''', (tracker_id,))
+    tracker = cursor.fetchone()
+    if not tracker or not tracker["image_data"]:
+        conn.close()
+        return "Image non trouvée", 404
+    image_bytes = tracker["image_data"]
+    owner_id = tracker["user_id"]
+    title = tracker["title"]
+    user_agent_str = request.headers.get('User-Agent', 'Unknown')
+    user_agent_obj = parse(user_agent_str)
+    device_type = 'Mobile' if user_agent_obj.is_mobile else ('Tablet' if user_agent_obj.is_tablet else 'Desktop')
+    browser_family = user_agent_obj.browser.family or 'Inconnu'
+    browser = str(browser_family)
+    ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip_address:
+        if ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+    else:
+        ip_address = 'Inconnu'
+    ip_info = None if ip_address in ('', 'Inconnu', None) else get_ip_info(ip_address)
+    country = ip_info.get('country') if ip_info else 'Inconnu'
+    region = ip_info.get('region') if ip_info else 'Inconnu'
+    city = ip_info.get('city') if ip_info else 'Inconnu'
+    cursor.execute('''
+        INSERT INTO image_clicks (tracker_id, ip_address, browser, device_type, country, region, city, user_agent)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (tracker_id, ip_address, browser, device_type, country, region, city, user_agent_str))
+    cursor.execute('''
+        UPDATE image_trackers
+        SET clicks = clicks + 1
+        WHERE id = ?
+    ''', (tracker_id,))
+    conn.commit()
+    conn.close()
+    if bot_instance:
+        try:
+            asyncio.run_coroutine_threadsafe(
+                notify_discord_image_click(owner_id, tracker_id, title, ip_address, browser, device_type, user_agent_str, ip_info),
+                bot_instance.loop
+            )
+        except Exception:
+            pass
+    buffer = io.BytesIO(image_bytes)
+    buffer.seek(0)
+    response = send_file(buffer, mimetype='image/png')
+    response.headers['Cache-Control'] = 'no-store, max-age=0'
+    return response
 
 @app.route('/link/<short_id>')
 def shortlink_redirect(short_id):

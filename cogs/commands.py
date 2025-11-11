@@ -199,6 +199,12 @@ class Commands(commands.Cog):
         )
         
         embed.add_field(
+            name="📷 **Tracking Image & Pixel**",
+            value="`/createimage <titre>` Génère une image traquée\n`+imagecreate <titre>` Upload + tracking IP\n`+imageclicks <id>` Derniers clics détaillés\n`+imagestats` Résumé de tous tes trackers",
+            inline=False
+        )
+        
+        embed.add_field(
             name="🌐 **Google Dorking - Techniques Avancées**",
             value="`+googlehint` Guide complet du Google dorking\n→ Syntaxe site, filetype, inurl, intitle, etc",
             inline=False
