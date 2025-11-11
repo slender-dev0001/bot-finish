@@ -1,430 +1,422 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
-import sqlite3
-import secrets
+import asyncio
+import io
 import os
+import secrets
+import sqlite3
+from pathlib import Path
+from typing import Iterable, Tuple
+from urllib.parse import urlparse
+
+import discord
+from discord import app_commands
+from discord.ext import commands
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
-import io
 
 load_dotenv()
-BASE_URL = os.getenv('BASE_URL', 'https://googg.up.railway.app')
-if BASE_URL and not BASE_URL.startswith(('http://', 'https://')):
-    BASE_URL = f'https://{BASE_URL}'
+DB_PATH = Path("links.db")
+DEFAULT_BASE_URL = "https://googg.up.railway.app"
+
+def resolve_base_url(default: str = DEFAULT_BASE_URL) -> str:
+    raw_url = os.getenv("BASE_URL", default)
+    if not raw_url:
+        return default
+    parsed = urlparse(raw_url)
+    if not parsed.scheme:
+        return f"https://{raw_url}".rstrip("/")
+    return raw_url.rstrip("/")
+
+BASE_URL = resolve_base_url()
+
+def ensure_tables() -> None:
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS image_trackers (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                guild_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                clicks INTEGER DEFAULT 0,
+                image_data BLOB
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS image_clicks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tracker_id TEXT NOT NULL,
+                ip_address TEXT,
+                browser TEXT,
+                device_type TEXT,
+                country TEXT,
+                region TEXT,
+                city TEXT,
+                user_agent TEXT,
+                clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(tracker_id) REFERENCES image_trackers(id)
+            )
+            """
+        )
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(image_trackers)")}
+        if "image_data" not in columns:
+            cursor.execute("ALTER TABLE image_trackers ADD COLUMN image_data BLOB")
 
 class ImageTracker(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.init_db()
+        ensure_tables()
 
-    def init_db(self):
-        try:
-            conn = sqlite3.connect("links.db")
+    def _generate_unique_tracker_id(self, cursor: sqlite3.Cursor, max_attempts: int = 20) -> str:
+        for _ in range(max_attempts):
+            candidate = secrets.token_urlsafe(6)
+            cursor.execute("SELECT 1 FROM image_trackers WHERE id = ?", (candidate,))
+            if cursor.fetchone() is None:
+                return candidate
+        raise RuntimeError("Impossible de générer un identifiant unique")
+
+    def _fetch_tracker_data(self, tracker_id: str) -> Tuple[sqlite3.Row | None, Iterable[sqlite3.Row]]:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
-            # Table pour les images tracker
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS image_trackers (
-                    id TEXT PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    guild_id INTEGER NOT NULL,
-                    title TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    clicks INTEGER DEFAULT 0
-                )
-            ''')
-            
-            # Table pour les clics sur les images
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS image_clicks (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tracker_id TEXT NOT NULL,
-                    ip_address TEXT,
-                    browser TEXT,
-                    device_type TEXT,
-                    country TEXT,
-                    region TEXT,
-                    city TEXT,
-                    user_agent TEXT,
-                    clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(tracker_id) REFERENCES image_trackers(id)
-                )
-            ''')
-            
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            print(f"Erreur lors de l'initialisation de la DB image tracker: {e}")
+            cursor.execute(
+                """
+                SELECT id, user_id, title, clicks, created_at
+                FROM image_trackers
+                WHERE id = ?
+                """,
+                (tracker_id,),
+            )
+            tracker = cursor.fetchone()
+            if tracker is None:
+                return None, []
+            cursor.execute(
+                """
+                SELECT ip_address, browser, device_type, country, region, city, clicked_at
+                FROM image_clicks
+                WHERE tracker_id = ?
+                ORDER BY clicked_at DESC
+                LIMIT 10
+                """,
+                (tracker_id,),
+            )
+            return tracker, cursor.fetchall()
 
-    def generate_tracker_id(self):
-        return secrets.token_urlsafe(6)
+    def _fetch_user_summary(self, user_id: int) -> tuple[int, int, list[tuple[str, str, int]], str | None]:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*), COALESCE(SUM(clicks), 0)
+                FROM image_trackers
+                WHERE user_id = ?
+                """,
+                (user_id,),
+            )
+            total_trackers, total_clicks = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT id, title, clicks
+                FROM image_trackers
+                WHERE user_id = ?
+                ORDER BY clicks DESC, created_at DESC
+                LIMIT 3
+                """,
+                (user_id,),
+            )
+            top_entries = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT clicked_at
+                FROM image_clicks
+                WHERE tracker_id IN (SELECT id FROM image_trackers WHERE user_id = ?)
+                ORDER BY clicked_at DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+            last_click_row = cursor.fetchone()
+        return (
+            total_trackers or 0,
+            total_clicks or 0,
+            [(row[0], row[1], row[2]) for row in top_entries],
+            last_click_row[0] if last_click_row else None,
+        )
 
-    def create_tracking_image(self, title):
-        """Créer une image attractive pour le tracking"""
-        # Dimensions de l'image
+    async def _create_tracker(self, user_id: int, guild_id: int, title: str) -> Tuple[str, bytes]:
+        image_bytes = await asyncio.to_thread(self.create_tracking_image, title)
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            tracker_id = self._generate_unique_tracker_id(cursor)
+            cursor.execute(
+                """
+                INSERT INTO image_trackers (id, user_id, guild_id, title, image_data)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (tracker_id, user_id, guild_id, title, image_bytes),
+            )
+        return tracker_id, image_bytes
+
+    @staticmethod
+    def _format_location(values: Iterable[str | None]) -> str:
+        parts = [value for value in values if value and value.strip() and value.strip().lower() != "inconnu"]
+        return ", ".join(parts) if parts else "Non disponible"
+
+    @staticmethod
+    def _format_click(row: sqlite3.Row) -> str:
+        location = ImageTracker._format_location((row[5], row[4], row[3]))
+        ip_value = row[0] or "Non disponible"
+        browser = row[1] or "Inconnu"
+        device = row[2] or "Inconnu"
+        timestamp = row[6] or "Inconnu"
+        return (
+            f"**IP:** `{ip_value}`\n"
+            f"📍 {location}\n"
+            f"🌐 {browser} | 📱 {device}\n"
+            f"🕐 {timestamp}"
+        )
+
+    @staticmethod
+    def _build_stats_embed(tracker_id: str, tracker: sqlite3.Row, clicks: Iterable[sqlite3.Row]) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"📊 Statistiques : {tracker['title']}",
+            description=f"**Total de clics :** {tracker['clicks']}",
+            color=discord.Color.blue(),
+        )
+        embed.add_field(
+            name="📋 Informations",
+            value=f"**ID:** `{tracker_id}`\n**Créé le:** {tracker['created_at']}",
+            inline=False,
+        )
+        click_list = list(clicks)
+        if click_list:
+            for index, row in enumerate(click_list, 1):
+                embed.add_field(
+                    name=f"Clic #{index}",
+                    value=ImageTracker._format_click(row),
+                    inline=False,
+                )
+        else:
+            embed.add_field(
+                name="📭 Aucun clic",
+                value="Cette image n'a pas encore été cliquée",
+                inline=False,
+            )
+        return embed
+
+    def create_tracking_image(self, title: str) -> bytes:
         width, height = 800, 400
-        
-        # Créer l'image avec un dégradé
-        img = Image.new('RGB', (width, height), color=(88, 101, 242))
-        draw = ImageDraw.Draw(img)
-        
-        # Dessiner un dégradé simple
-        for i in range(height):
-            color_value = int(88 + (i / height) * 50)
-            draw.rectangle([(0, i), (width, i+1)], fill=(color_value, 101, 242))
-        
-        # Ajouter le texte
+        image = Image.new("RGB", (width, height), color=(88, 101, 242))
+        draw = ImageDraw.Draw(image)
+        for y in range(height):
+            color_value = int(88 + (y / height) * 50)
+            draw.rectangle([(0, y), (width, y + 1)], fill=(color_value, 101, 242))
         try:
-            # Essayer de charger une police système
             font_large = ImageFont.truetype("arial.ttf", 50)
             font_small = ImageFont.truetype("arial.ttf", 30)
-        except:
-            # Utiliser la police par défaut si arial n'est pas disponible
+        except OSError:
             font_large = ImageFont.load_default()
             font_small = ImageFont.load_default()
-        
-        # Titre
-        title_text = title if len(title) < 30 else title[:27] + "..."
-        
-        # Calculer la position centrée
-        bbox = draw.textbbox((0, 0), title_text, font=font_large)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        
-        x = (width - text_width) // 2
-        y = (height - text_height) // 2 - 30
-        
-        # Dessiner le texte avec ombre
-        draw.text((x + 2, y + 2), title_text, fill=(0, 0, 0, 128), font=font_large)
-        draw.text((x, y), title_text, fill=(255, 255, 255), font=font_large)
-        
-        # Sous-titre
+        title_text = title if len(title) <= 30 else f"{title[:27]}..."
+        bbox_title = draw.textbbox((0, 0), title_text, font=font_large)
+        title_width = bbox_title[2] - bbox_title[0]
+        title_height = bbox_title[3] - bbox_title[1]
+        title_x = (width - title_width) // 2
+        title_y = (height - title_height) // 2 - 30
+        draw.text((title_x + 2, title_y + 2), title_text, fill=(0, 0, 0), font=font_large)
+        draw.text((title_x, title_y), title_text, fill=(255, 255, 255), font=font_large)
         subtitle = "🎁 Cliquez pour voir"
-        bbox_sub = draw.textbbox((0, 0), subtitle, font=font_small)
-        sub_width = bbox_sub[2] - bbox_sub[0]
-        x_sub = (width - sub_width) // 2
-        y_sub = y + text_height + 20
-        
-        draw.text((x_sub + 1, y_sub + 1), subtitle, fill=(0, 0, 0, 128), font=font_small)
-        draw.text((x_sub, y_sub), subtitle, fill=(255, 255, 255), font=font_small)
-        
-        # Sauvegarder en bytes
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format='PNG')
-        img_bytes.seek(0)
-        
-        return img_bytes
+        bbox_subtitle = draw.textbbox((0, 0), subtitle, font=font_small)
+        subtitle_width = bbox_subtitle[2] - bbox_subtitle[0]
+        subtitle_x = (width - subtitle_width) // 2
+        subtitle_y = title_y + title_height + 20
+        draw.text((subtitle_x + 1, subtitle_y + 1), subtitle, fill=(0, 0, 0), font=font_small)
+        draw.text((subtitle_x, subtitle_y), subtitle, fill=(255, 255, 255), font=font_small)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
 
     @app_commands.command(name="createimage", description="Créer une image qui track les clics avec l'IP")
     async def createimage(self, interaction: discord.Interaction, title: str):
-        """Créer une image tracker qui envoie une notification avec l'IP quand quelqu'un clique"""
-        
         await interaction.response.defer(ephemeral=True)
-        
         try:
-            # Générer un ID unique
-            tracker_id = self.generate_tracker_id()
-            
-            # Enregistrer dans la base de données
-            conn = sqlite3.connect("links.db")
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO image_trackers (id, user_id, guild_id, title)
-                VALUES (?, ?, ?, ?)
-            ''', (tracker_id, interaction.user.id, interaction.guild.id if interaction.guild else 0, title))
-            conn.commit()
-            conn.close()
-            
-            # Créer l'image
-            img_bytes = self.create_tracking_image(title)
-            
-            # URL de tracking
-            tracking_url = f"{BASE_URL}/image/{tracker_id}"
-            
-            # Créer l'embed de confirmation
+            tracker_id, image_bytes = await self._create_tracker(
+                interaction.user.id,
+                interaction.guild.id if interaction.guild else 0,
+                title,
+            )
+            filename = f"tracker_{tracker_id}.png"
             embed = discord.Embed(
                 title="✅ Image Tracker Créée !",
-                description=f"Votre image tracker est prête !",
-                color=discord.Color.green()
+                description="Votre image tracker est prête !",
+                color=discord.Color.green(),
             )
-            
             embed.add_field(
                 name="📋 Informations",
                 value=f"**Titre:** {title}\n**ID:** `{tracker_id}`",
-                inline=False
+                inline=False,
             )
-            
-            embed.add_field(
-                name="🔗 URL de l'image",
-                value=f"```{tracking_url}```",
-                inline=False
-            )
-            
             embed.add_field(
                 name="📊 Utilisation",
                 value=(
-                    "Partagez cette URL ou utilisez `/imageclick` pour voir les statistiques.\n"
-                    "Quand quelqu'un clique sur l'image, vous recevrez une notification avec :\n"
+                    "L'image PNG est jointe à ce message.\n"
+                    "Utilisez `/imageclicks` ou `+imagestats` pour retrouver le lien tracker et consulter les statistiques.\n"
+                    "En cas de chargement via ce lien, vous recevrez :\n"
                     "• 📍 Adresse IP\n"
                     "• 🌍 Localisation (pays, région, ville)\n"
                     "• 🖥️ Navigateur et appareil\n"
                     "• 🕐 Date et heure du clic"
                 ),
-                inline=False
+                inline=False,
             )
-            
             embed.add_field(
                 name="⚠️ Avertissement",
                 value="Cette fonctionnalité est à utiliser de manière éthique et légale uniquement.",
-                inline=False
+                inline=False,
             )
-            
             embed.set_footer(text="Les notifications seront envoyées en DM")
-            
-            # Envoyer l'image en tant que fichier
-            file = discord.File(img_bytes, filename=f"tracker_{tracker_id}.png")
-            
+            file = discord.File(io.BytesIO(image_bytes), filename=filename)
             await interaction.followup.send(embed=embed, file=file, ephemeral=True)
-            
-            # Message public dans le salon
-            public_embed = discord.Embed(
-                title="🖼️ Nouvelle Image",
-                description=f"**{title}**",
-                color=discord.Color.blue()
-            )
-            public_embed.set_image(url=tracking_url)
-            public_embed.set_footer(text=f"Créé par {interaction.user.name}")
-            
-            await interaction.channel.send(embed=public_embed)
-            
-        except Exception as e:
+            if interaction.channel:
+                public_embed = discord.Embed(
+                    title="🖼️ Nouvelle Image",
+                    description=f"**{title}**",
+                    color=discord.Color.blue(),
+                )
+                public_embed.set_image(url=f"attachment://{filename}")
+                public_embed.set_footer(text=f"Créé par {interaction.user.name}")
+                await interaction.channel.send(
+                    embed=public_embed,
+                    file=discord.File(io.BytesIO(image_bytes), filename=filename),
+                )
+        except Exception as error:
             embed = discord.Embed(
                 title="❌ Erreur",
-                description=f"Erreur lors de la création de l'image : {str(e)}",
-                color=discord.Color.red()
+                description=f"Erreur lors de la création de l'image : {error}",
+                color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="imageclicks", description="Voir les statistiques de votre image tracker")
     async def imageclicks(self, interaction: discord.Interaction, tracker_id: str):
-        """Afficher les statistiques d'une image tracker"""
-        
         await interaction.response.defer(ephemeral=True)
-        
         try:
-            conn = sqlite3.connect("links.db")
-            cursor = conn.cursor()
-            
-            # Vérifier que l'utilisateur est le propriétaire
-            cursor.execute('''
-                SELECT user_id, title, clicks, created_at
-                FROM image_trackers
-                WHERE id = ?
-            ''', (tracker_id,))
-            
-            result = cursor.fetchone()
-            
-            if not result:
+            tracker, clicks = self._fetch_tracker_data(tracker_id)
+            if tracker is None:
                 embed = discord.Embed(
                     title="❌ Tracker non trouvé",
                     description=f"Aucune image tracker avec l'ID `{tracker_id}`",
-                    color=discord.Color.red()
+                    color=discord.Color.red(),
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
-                conn.close()
                 return
-            
-            user_id, title, clicks, created_at = result
-            
-            if user_id != interaction.user.id:
+            if tracker["user_id"] != interaction.user.id:
                 embed = discord.Embed(
                     title="❌ Accès refusé",
                     description="Vous n'êtes pas le propriétaire de cette image tracker",
-                    color=discord.Color.red()
+                    color=discord.Color.red(),
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
-                conn.close()
                 return
-            
-            # Récupérer les clics
-            cursor.execute('''
-                SELECT ip_address, browser, device_type, country, region, city, clicked_at
-                FROM image_clicks
-                WHERE tracker_id = ?
-                ORDER BY clicked_at DESC
-                LIMIT 10
-            ''', (tracker_id,))
-            
-            click_results = cursor.fetchall()
-            conn.close()
-            
-            embed = discord.Embed(
-                title=f"📊 Statistiques : {title}",
-                description=f"**Total de clics :** {clicks}",
-                color=discord.Color.blue()
-            )
-            
-            embed.add_field(
-                name="📋 Informations",
-                value=f"**ID:** `{tracker_id}`\n**Créé le:** {created_at}",
-                inline=False
-            )
-            
-            if click_results:
-                for idx, (ip, browser, device, country, region, city, clicked_at) in enumerate(click_results, 1):
-                    location = f"{city}, {region}, {country}" if city != "Inconnu" else "Non disponible"
-                    click_info = (
-                        f"**IP:** `{ip}`\n"
-                        f"📍 {location}\n"
-                        f"🌐 {browser} | 📱 {device}\n"
-                        f"🕐 {clicked_at}"
-                    )
-                    embed.add_field(
-                        name=f"Clic #{idx}",
-                        value=click_info,
-                        inline=False
-                    )
-            else:
-                embed.add_field(
-                    name="📭 Aucun clic",
-                    value="Cette image n'a pas encore été cliquée",
-                    inline=False
-                )
-            
+            embed = self._build_stats_embed(tracker_id, tracker, clicks)
             await interaction.followup.send(embed=embed, ephemeral=True)
-            
-        except Exception as e:
+        except Exception as error:
             embed = discord.Embed(
                 title="❌ Erreur",
-                description=f"Erreur : {str(e)}",
-                color=discord.Color.red()
+                description=f"Erreur : {error}",
+                color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @commands.command(name='createimage')
+    @commands.command(name="createimage")
     async def createimage_prefix(self, ctx, *, title: str):
-        """Version prefix de la commande createimage"""
-        
         try:
-            # Générer un ID unique
-            tracker_id = self.generate_tracker_id()
-            
-            # Enregistrer dans la base de données
-            conn = sqlite3.connect("links.db")
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO image_trackers (id, user_id, guild_id, title)
-                VALUES (?, ?, ?, ?)
-            ''', (tracker_id, ctx.author.id, ctx.guild.id if ctx.guild else 0, title))
-            conn.commit()
-            conn.close()
-            
-            # Créer l'image
-            img_bytes = self.create_tracking_image(title)
-            
-            # URL de tracking
-            tracking_url = f"{BASE_URL}/image/{tracker_id}"
-            
-            # Créer l'embed
+            tracker_id, image_bytes = await self._create_tracker(
+                ctx.author.id,
+                ctx.guild.id if ctx.guild else 0,
+                title,
+            )
+            filename = f"tracker_{tracker_id}.png"
             embed = discord.Embed(
                 title="✅ Image Tracker Créée !",
-                description=f"Votre image tracker est prête !",
-                color=discord.Color.green()
+                description="Votre image tracker est prête !",
+                color=discord.Color.green(),
             )
-            
             embed.add_field(
                 name="📋 Informations",
                 value=f"**Titre:** {title}\n**ID:** `{tracker_id}`",
-                inline=False
+                inline=False,
             )
-            
-            embed.add_field(
-                name="🔗 URL de l'image",
-                value=f"```{tracking_url}```",
-                inline=False
-            )
-            
             embed.add_field(
                 name="📊 Commandes",
-                value=f"`+imageclicks {tracker_id}` - Voir les statistiques",
-                inline=False
+                value=(
+                    f"`+imageclicks {tracker_id}` - Statistiques détaillées\n"
+                    "`+imagestats` - Résumé global et liens"
+                ),
+                inline=False,
             )
-            
+            embed.set_image(url=f"attachment://{filename}")
             embed.set_footer(text="⚠️ À utiliser de manière éthique")
-            
-            # Envoyer l'image
-            file = discord.File(img_bytes, filename=f"tracker_{tracker_id}.png")
+            file = discord.File(io.BytesIO(image_bytes), filename=filename)
             await ctx.send(embed=embed, file=file)
-            
-        except Exception as e:
+        except Exception as error:
             embed = discord.Embed(
                 title="❌ Erreur",
-                description=f"Erreur : {str(e)}",
-                color=discord.Color.red()
+                description=f"Erreur : {error}",
+                color=discord.Color.red(),
             )
             await ctx.send(embed=embed)
 
-    @commands.command(name='imageclicks')
-    async def imageclicks_prefix(self, ctx, tracker_id: str):
-        """Version prefix de imageclicks"""
-        
-        try:
-            conn = sqlite3.connect("links.db")
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT user_id, title, clicks, created_at
-                FROM image_trackers
-                WHERE id = ?
-            ''', (tracker_id,))
-            
-            result = cursor.fetchone()
-            
-            if not result:
-                await ctx.send("❌ Tracker non trouvé")
-                conn.close()
-                return
-            
-            user_id, title, clicks, created_at = result
-            
-            if user_id != ctx.author.id:
-                await ctx.send("❌ Accès refusé")
-                conn.close()
-                return
-            
-            cursor.execute('''
-                SELECT ip_address, browser, device_type, country, region, city, clicked_at
-                FROM image_clicks
-                WHERE tracker_id = ?
-                ORDER BY clicked_at DESC
-                LIMIT 10
-            ''', (tracker_id,))
-            
-            click_results = cursor.fetchall()
-            conn.close()
-            
-            embed = discord.Embed(
-                title=f"📊 Statistiques : {title}",
-                description=f"**Total :** {clicks} clic(s)",
-                color=discord.Color.blue()
+    @commands.command(name="imagestats")
+    async def imagestats_prefix(self, ctx):
+        trackers_count, total_clicks, top_entries, last_click = self._fetch_user_summary(ctx.author.id)
+        if trackers_count == 0:
+            await ctx.send("❌ Vous n'avez pas encore d'image tracker.")
+            return
+        embed = discord.Embed(
+            title="📈 Statistiques Image Tracker",
+            color=discord.Color.purple(),
+        )
+        embed.add_field(
+            name="Résumé",
+            value=(
+                f"**Trackers actifs:** {trackers_count}\n"
+                f"**Total de clics:** {total_clicks}\n"
+                f"**Dernier clic:** {last_click or 'Aucun'}"
+            ),
+            inline=False,
+        )
+        if top_entries:
+            lines = []
+            for index, (tracker_id, title, clicks) in enumerate(top_entries, 1):
+                tracker_title = title or "Sans titre"
+                lines.append(
+                    f"**#{index}** {tracker_title} • {clicks} clic(s)\n{BASE_URL}/image/{tracker_id}"
+                )
+            embed.add_field(
+                name="Top 3",
+                value="\n".join(lines),
+                inline=False,
             )
-            
-            if click_results:
-                for idx, (ip, browser, device, country, region, city, clicked_at) in enumerate(click_results[:5], 1):
-                    location = f"{city}, {region}, {country}"
-                    embed.add_field(
-                        name=f"Clic #{idx}",
-                        value=f"`{ip}` | {location}\n{browser} | {device}",
-                        inline=False
-                    )
-            else:
-                embed.add_field(name="📭", value="Aucun clic", inline=False)
-            
+        await ctx.send(embed=embed)
+
+    @commands.command(name="imageclicks")
+    async def imageclicks_prefix(self, ctx, tracker_id: str):
+        try:
+            tracker, clicks = self._fetch_tracker_data(tracker_id)
+            if tracker is None:
+                await ctx.send("❌ Tracker non trouvé")
+                return
+            if tracker["user_id"] != ctx.author.id:
+                await ctx.send("❌ Accès refusé")
+                return
+            embed = self._build_stats_embed(tracker_id, tracker, clicks)
             await ctx.send(embed=embed)
-            
-        except Exception as e:
-            await ctx.send(f"❌ Erreur : {str(e)}")
+        except Exception as error:
+            await ctx.send(f"❌ Erreur : {error}")
 
 async def setup(bot):
     await bot.add_cog(ImageTracker(bot))

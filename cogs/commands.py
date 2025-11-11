@@ -404,7 +404,7 @@ class Commands(commands.Cog):
         
         embed.add_field(
             name="🎨 **Outils Créatifs**",
-            value="`+qrcode <texte>` Générer un QR Code\n`+ascii <texte>` Art ASCII\n`+asciistyles` Voir les styles ASCII",
+            value="`+qrcode <texte>` Générer un QR Code\n`+ascii <texte>` Art ASCII\n`+asciistyles` Voir les styles ASCII\n`+imagecreate [titre]` Créer une image tracker\n`+imageclicks <id>` Statistiques d'une image\n`+imagestats` Résumé global des trackers",
             inline=False
         )
         
@@ -428,7 +428,7 @@ class Commands(commands.Cog):
         
         embed.add_field(
             name="📊 **Slash Commands Modernes** (Avec /)",
-            value="`/help` Aide complète\n`/ping` Latence\n`/usercard [@user]` Carte de profil\n`/leaderboard` Top 10\n`/about` À propos\n`/hello` Salutation\n`/say <msg>` Répéter\n`/avatar [@user]` Avatar\n`/dice` Dé\n`/flip` Pile/Face\n`/8ball` Boule magique\n`/clear <n>` Supprimer messages\n`/kick` `/ban` `/unban` `/mute` `/unmute` (Modération)\n`/serverinfo` `/userinfo` `/roleinfo` `/channelinfo` `/stats` (Info)",
+            value="`/help` Aide complète\n`/ping` Latence\n`/usercard [@user]` Carte de profil\n`/leaderboard` Top 10\n`/about` À propos\n`/hello` Salutation\n`/say <msg>` Répéter\n`/avatar [@user]` Avatar\n`/dice` Dé\n`/flip` Pile/Face\n`/8ball` Boule magique\n`/createimage <titre>` Créer une image tracker\n`/imageclicks <id>` Statistiques d'une image\n`/clear <n>` Supprimer messages\n`/kick` `/ban` `/unban` `/mute` `/unmute` (Modération)\n`/serverinfo` `/userinfo` `/roleinfo` `/channelinfo` `/stats` (Info)",
             inline=False
         )
         
