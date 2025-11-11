@@ -157,49 +157,5 @@ def main():
         raise
 
 
-import discord
-import requests
-import json
-from flask import Flask, request, jsonify
-
-# Remplacez par votre token de bot Discord
-TOKEN = ''
-
-intents = discord.Intents.default()
-intents.messages = True
-intents.message_content = True
-client = discord.Client(intents=intents)
-
-app = Flask(__name__)
-
-@app.route('/image', methods=['GET'])
-def get_image():
-    user_ip = request.remote_addr
-    print(f"IP de l'utilisateur : {user_ip}")
-    return jsonify({"message": "Image chargée", "ip": user_ip})
-
-@client.event
-async def on_ready():
-    print(f'Bot connecté en tant que {client.user}')
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-
-    if message.content.startswith('!sendimage'):
-        embed = discord.Embed(title="Voici une image :")
-        embed.set_image(url="http://googg.up.railway.app/image")
-        await message.channel.send(embed=embed)
-
-        # Envoyer un message privé à l'utilisateur avec l'IP
-        response = requests.get('http://googg.up.railway.app/image')
-        ip = response.json()['ip']
-        await message.author.send(f"IP de l'utilisateur qui a cliqué sur l'image : {ip}")
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-    client.run(TOKEN)
-
 if __name__ == '__main__':
     main()
