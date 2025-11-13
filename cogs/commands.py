@@ -139,20 +139,20 @@ class Commands(commands.Cog):
         )
         
         embed.add_field(
-            name="👤 **Recherche Personnelle**",
-            value="`+searchname <prénom> <nom>` Recherche OSINT complète par nom\n→ Emails, fuites, comptes sociaux\n\n`+useroslint <id_discord>` Lookup utilisateur Discord\n→ Comptes sociaux, emails possibles, fuites",
+            name="👤 **Recherche Personnelle Complète**",
+            value="`+searchcontact <prénom> <nom>` Profil complet ultra-avancé 🔥\n→ Âge estimé, genre, pays, emails, fuites, réseaux sociaux, web results\n\n`+searchname <prénom> <nom>` Recherche OSINT par nom\n→ Emails, fuites, comptes sociaux\n\n`+useroslint <id_discord>` Lookup utilisateur Discord\n→ Comptes sociaux, emails possibles, fuites",
             inline=False
         )
         
         embed.add_field(
-            name="☎️ **Recherche Téléphone**",
-            value="`+searchphone <numéro>` Recherche numéro de téléphone\n→ Fuites, localisation, annuaires\n\n`+searchphone_reverse <numéro>` Recherche inversée complète\n→ Apps, Truecaller, sites de lookup",
+            name="☎️ **Recherche Téléphone Avancée**",
+            value="`+searchphone <numéro>` Analyse téléphone détaillée 🔥\n→ Pays, opérateur, propriétaire, Truecaller, formats alternatifs\n\n`+searchphone_reverse <numéro>` Recherche inversée\n→ Apps, sites de lookup, annuaires\n\n`+phonelocation <numéro>` Localisation & infos\n→ Opérateur, type de ligne, localisation",
             inline=False
         )
         
         embed.add_field(
-            name="📧 **Recherche Email**",
-            value="`+searchemail <email>` Analyse complète d'une email\n→ Fuites, validation domaine, comptes sociaux",
+            name="📧 **Recherche Email Avancée**",
+            value="`+searchemail <email>` Analyse email complète 🔥\n→ Réputation, blacklist, credentials leakés, 5+ fuites (HIBP + EmailRep)\n\n`+reverseemail <email>` Trouve comptes associés\n→ Résultats Google, comptes sociaux\n\n`+emailverify <email>` Vérification validité\n→ Format, domaine, MX records",
             inline=False
         )
         
@@ -210,11 +210,7 @@ class Commands(commands.Cog):
             inline=False
         )
         
-        embed.add_field(
-            name="☎️ **Localisation Numéro Téléphone**",
-            value="`+phonelocation <numéro>` Infos détaillées d'un téléphone\n→ Opérateur, type de ligne, localisation, nom",
-            inline=False
-        )
+
         
         embed.add_field(
             name="🌐 **Whois - Infos Domaine**",
