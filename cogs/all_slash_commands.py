@@ -13,7 +13,7 @@ import time
 from dotenv import load_dotenv
 
 load_dotenv()
-BASE_URL = os.getenv('BASE_URL', 'http://localhost:5001')
+BASE_URL = os.getenv('BASE_URL', ' googg.up.app')
 
 class AllSlashCommands(commands.Cog):
     def __init__(self, bot):
