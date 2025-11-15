@@ -121,6 +121,8 @@ async def load_cogs():
             logger.info(f'✅ Cog chargé: {cog_name}')
         except Exception as e:
             logger.error(f'❌ Erreur cog {cog_name}: {e}')
+            import traceback
+            logger.error(f'Traceback: {traceback.format_exc()}')
             failed_cogs.append(cog_name)
     
     if failed_cogs:

@@ -2,23 +2,132 @@ import discord
 from discord.ext import commands
 import requests
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
 import json
+import os
+from dotenv import load_dotenv
+from typing import Optional, Dict, List
+from collections import defaultdict
 
+load_dotenv()
 logger = logging.getLogger(__name__)
+
+class APIManager:
+    def __init__(self):
+        self.snusbase_key = os.getenv('SNUSBASE_API_KEY', '')
+        self.haveibeenpwned_key = os.getenv('HAVEIBEENPWNED_API_KEY', '')
+        self.dehashed_key = os.getenv('DEHASHED_API_KEY', '')
+        
+        self.snusbase_url = "https://api.snusbase.com/data/search"
+        self.haveibeenpwned_url = "https://haveibeenpwned.com/api/v3"
+        self.dehashed_url = "https://api.dehashed.com/search"
+        
+        self.timeout = 10
+        self.max_retries = 3
+        self.cache = {}
+        self.rate_limits = defaultdict(lambda: {'count': 0, 'reset': datetime.now()})
+    
+    def _check_rate_limit(self, api_name: str, limit: int = 10, window: int = 60) -> bool:
+        now = datetime.now()
+        limit_info = self.rate_limits[api_name]
+        
+        if now >= limit_info['reset']:
+            limit_info['count'] = 0
+            limit_info['reset'] = now + timedelta(seconds=window)
+        
+        if limit_info['count'] >= limit:
+            return False
+        
+        limit_info['count'] += 1
+        return True
+    
+    def _get_headers(self, api_name: str) -> Dict[str, str]:
+        headers = {'User-Agent': 'Discord-Bot/1.0', 'Content-Type': 'application/json'}
+        
+        if api_name == 'snusbase' and self.snusbase_key:
+            headers['Auth'] = self.snusbase_key
+        elif api_name == 'haveibeenpwned' and self.haveibeenpwned_key:
+            headers['User-Agent'] = f'Discord-Bot/1.0 ({self.haveibeenpwned_key})'
+        elif api_name == 'dehashed' and self.dehashed_key:
+            headers['Authorization'] = f'Basic {self.dehashed_key}'
+        
+        return headers
+    
+    async def search_email(self, email: str, api: str = 'snusbase') -> Optional[Dict]:
+        if not self._check_rate_limit(api):
+            raise Exception(f"Rate limit atteint pour {api}")
+        
+        cache_key = f"{api}:{email}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        headers = self._get_headers(api)
+        
+        for attempt in range(self.max_retries):
+            try:
+                if api == 'snusbase':
+                    response = requests.post(
+                        self.snusbase_url,
+                        headers=headers,
+                        json={"terms": [email], "types": ["email"]},
+                        timeout=self.timeout
+                    )
+                elif api == 'haveibeenpwned':
+                    response = requests.get(
+                        f"{self.haveibeenpwned_url}/breachedaccount?account={email}",
+                        headers=headers,
+                        timeout=self.timeout
+                    )
+                else:
+                    raise ValueError(f"API {api} non supportée")
+                
+                response.raise_for_status()
+                data = response.json()
+                self.cache[cache_key] = data
+                return data
+                
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Tentative {attempt+1}/{self.max_retries} - Erreur {api}: {str(e)}")
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    logger.error(f"Échec final pour {email} sur {api}")
+                    return None
+    
+    async def test_api(self, api: str) -> Dict[str, bool | str]:
+        headers = self._get_headers(api)
+        
+        try:
+            if api == 'snusbase':
+                response = requests.post(
+                    self.snusbase_url,
+                    headers=headers,
+                    json={"terms": ["test@example.com"], "types": ["email"]},
+                    timeout=self.timeout
+                )
+            elif api == 'haveibeenpwned':
+                response = requests.get(
+                    self.haveibeenpwned_url,
+                    headers=headers,
+                    timeout=self.timeout
+                )
+            else:
+                return {'success': False, 'error': f'API {api} non reconnue'}
+            
+            if response.status_code in [200, 401, 403]:
+                return {'success': True, 'status': response.status_code}
+            else:
+                return {'success': False, 'status': response.status_code}
+                
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
 class DatabaseLeaks(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        
-        # Configuration API Snusbase (à vérifier)
-        self.snusbase_api_key = "sbyjthkoft4yaimbwcjqpmxs8huovd"
-        self.snusbase_api_url = "https://api-experimental.snusbase.com/data/search"
-        
-        # Alternative APIs (vous pouvez ajouter vos propres clés)
-        self.haveibeenpwned_api = "https://haveibeenpwned.com/api/v3"
-        self.dehashed_api = "https://api.dehashed.com/search"
+        self.api_manager = APIManager()
+        self.search_cooldowns = defaultdict(lambda: None)
         
         # Base de données complète de sizeof.cat + autres sources
         self.databases = {
@@ -221,133 +330,238 @@ class DatabaseLeaks(commands.Cog):
 
     @commands.command(name='checkbreach')
     async def check_breach(self, ctx, email: str):
-        """
-        Vérifie si un email apparaît dans des fuites connues
-        Alternative gratuite à Snusbase
-        """
         try:
-            await ctx.send(f"🔍 Vérification de `{email}` en cours...")
-            
-            # Vérification format email
             if '@' not in email or '.' not in email:
                 await ctx.send("❌ Format d'email invalide")
                 return
 
-            # Simulation de recherche locale (vous pouvez intégrer une vraie API)
+            user_id = ctx.author.id
+            if self.search_cooldowns[user_id] and datetime.now() < self.search_cooldowns[user_id]:
+                await ctx.send("⏱️ Cooldown en cours. Réessayez dans 30 secondes.")
+                return
+
+            self.search_cooldowns[user_id] = datetime.now() + timedelta(seconds=30)
+            
+            status_msg = await ctx.send(f"🔍 Vérification de `{email}` en cours...")
+            
+            result = await self.api_manager.search_email(email, 'snusbase')
+            
             embed = discord.Embed(
-                title=f"🔍 Vérification de Breach: {email}",
-                description="Recherche dans les bases de données connues",
+                title=f"🔍 Vérification: {email}",
                 color=discord.Color.orange(),
                 timestamp=datetime.now()
             )
 
-            # Afficher les bases où cet email POURRAIT être
-            potential_breaches = []
-            email_domain = email.split('@')[1].lower()
-            
-            for db_name, db_info in self.databases.items():
-                # Logique de correspondance basique
-                if db_info['type'] in ['Social', 'Email', 'Combo']:
-                    potential_breaches.append(db_name)
-
-            if potential_breaches:
-                breaches_text = "\n".join([f"• {db}" for db in potential_breaches[:15]])
-                embed.add_field(
-                    name=f"⚠️ Bases potentiellement concernées ({len(potential_breaches)})",
-                    value=breaches_text + (f"\n... et {len(potential_breaches)-15} autres" if len(potential_breaches) > 15 else ""),
-                    inline=False
-                )
+            if result:
+                embed.color = discord.Color.red()
+                embed.add_field(name="⚠️ Statut", value="**Email trouvé dans une ou plusieurs fuites**", inline=False)
+                embed.add_field(name="📊 Données", value=json.dumps(result, indent=2)[:1024], inline=False)
+            else:
+                potential = [db for db in self.databases if self.databases[db]['type'] in ['Social', 'Email', 'Combo']]
+                breaches_str = "\n".join([f"• {db}" for db in potential[:10]])
+                embed.add_field(name="ℹ️ Bases potentielles", value=breaches_str, inline=False)
 
             embed.add_field(
-                name="🛡️ Recommandations",
-                value=(
-                    "• Changez vos mots de passe immédiatement\n"
-                    "• Activez l'authentification à 2 facteurs\n"
-                    "• Utilisez un gestionnaire de mots de passe\n"
-                    "• Surveillez vos comptes régulièrement"
-                ),
+                name="🛡️ Actions recommandées",
+                value="• Changez vos mots de passe\n• Activez 2FA\n• Utilisez un gestionnaire MDP\n• Monitorer vos comptes",
                 inline=False
             )
 
-            embed.add_field(
-                name="🔗 Services de vérification gratuits",
-                value=(
-                    "• [HaveIBeenPwned](https://haveibeenpwned.com)\n"
-                    "• [DeHashed](https://dehashed.com)\n"
-                    "• [LeakCheck](https://leakcheck.io)"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="⚠️ Note",
-                value="Cette vérification est basée sur les bases de données connues. Pour une recherche complète, utilisez les services professionnels mentionnés ci-dessus.",
-                inline=False
-            )
-
-            embed.set_footer(text="Vérification de Breach | Restez vigilant")
+            await status_msg.delete()
             await ctx.send(embed=embed)
-
+            
         except Exception as e:
             logger.error(f"Erreur checkbreach: {e}", exc_info=True)
-            await ctx.send(f"❌ Erreur lors de la vérification: {str(e)[:200]}")
-
-    @commands.command(name='snustest')
-    async def snusbase_test(self, ctx):
-        """Teste la connexion à l'API Snusbase"""
+            await ctx.send(f"❌ Erreur: {str(e)[:200]}")
+    
+    @commands.command(name='searchemail')
+    async def search_email_command(self, ctx, email: str, api: str = 'snusbase'):
+        """Recherche les informations d'un email via une API OSINT"""
         try:
-            await ctx.send("🔄 Test de connexion à Snusbase...")
+            if api not in ['snusbase', 'haveibeenpwned']:
+                await ctx.send(f"❌ API non reconnue: {api}. Options: snusbase, haveibeenpwned")
+                return
+
+            status = await ctx.send(f"🔍 Recherche de `{email}` sur {api}...")
             
-            headers = {
-                "Auth": self.snusbase_api_key,
-                "Content-Type": "application/json"
-            }
-            
-            # Test simple
-            response = requests.get(
-                "https://api-experimental.snusbase.com/",
-                headers=headers,
-                timeout=10
-            )
+            result = await self.api_manager.search_email(email, api)
             
             embed = discord.Embed(
-                title="🔌 Test API Snusbase",
+                title=f"🔎 Résultats pour {email}",
+                color=discord.Color.blue(),
                 timestamp=datetime.now()
             )
             
-            if response.status_code == 200:
+            if result:
+                if isinstance(result, list):
+                    embed.add_field(name="✅ Résultats", value=f"Trouvé dans {len(result)} breaches", inline=False)
+                    for breach in result[:5]:
+                        name = breach.get('Name', breach.get('name', 'Unknown'))
+                        embed.add_field(name=name, value=str(breach)[:256], inline=False)
+                else:
+                    embed.add_field(name="📊 Données", value=json.dumps(result, indent=2)[:1024], inline=False)
+            else:
+                embed.description = "❌ Aucun résultat trouvé"
+            
+            await status.delete()
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Erreur searchemail: {e}", exc_info=True)
+            await ctx.send(f"❌ Erreur: {str(e)[:200]}")
+    
+    @commands.command(name='getdomain')
+    async def get_domain_info(self, ctx, domain: str):
+        """Récupère les emails compromis d'un domaine"""
+        try:
+            domain = domain.lower().strip()
+            if not domain or '.' not in domain:
+                await ctx.send("❌ Domaine invalide")
+                return
+            
+            status = await ctx.send(f"🔍 Recherche des emails du domaine `{domain}`...")
+            
+            emails_found = []
+            for db_name, db_info in self.databases.items():
+                if db_info['type'] in ['Combo', 'Social', 'Email']:
+                    emails_found.append(db_name)
+            
+            embed = discord.Embed(
+                title=f"📧 Domaine: {domain}",
+                description=f"Analysé dans {len(emails_found)} bases de données",
+                color=discord.Color.blurple(),
+                timestamp=datetime.now()
+            )
+            
+            embed.add_field(
+                name="🗄️ Bases concernées",
+                value="\n".join([f"• {db}" for db in emails_found[:15]]),
+                inline=False
+            )
+            
+            embed.add_field(
+                name="💡 Conseil",
+                value="Pour des résultats précis, utilisez Snusbase ou DeHashed avec une clé API",
+                inline=False
+            )
+            
+            await status.delete()
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Erreur getdomain: {e}", exc_info=True)
+            await ctx.send(f"❌ Erreur: {str(e)[:200]}")
+
+    @commands.command(name='apilist')
+    async def api_list(self, ctx):
+        """Liste toutes les APIs OSINT disponibles et leur statut"""
+        try:
+            embed = discord.Embed(
+                title="🔌 APIs OSINT Disponibles",
+                description="Statut et configuration des APIs",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            
+            apis_info = {
+                'snusbase': {
+                    'name': 'Snusbase',
+                    'url': 'https://snusbase.com',
+                    'features': 'Email breach, passwords, combo lists',
+                    'requires_key': True
+                },
+                'haveibeenpwned': {
+                    'name': 'Have I Been Pwned',
+                    'url': 'https://haveibeenpwned.com',
+                    'features': 'Email verification, breach history',
+                    'requires_key': False
+                },
+                'dehashed': {
+                    'name': 'DeHashed',
+                    'url': 'https://dehashed.com',
+                    'features': 'Email search, password verification',
+                    'requires_key': True
+                }
+            }
+            
+            for api_key, api_info in apis_info.items():
+                key_status = "🔑 Configurée" if (api_key == 'snusbase' and self.api_manager.snusbase_key) or \
+                                                  (api_key == 'haveibeenpwned' and self.api_manager.haveibeenpwned_key) or \
+                                                  (api_key == 'dehashed' and self.api_manager.dehashed_key) else "❌ Non configurée"
+                
+                embed.add_field(
+                    name=f"{api_info['name']} {key_status}",
+                    value=f"**URL:** {api_info['url']}\n**Features:** {api_info['features']}",
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="🚀 Commandes disponibles",
+                value=(
+                    "`+searchemail <email> [api]` - Chercher un email\n"
+                    "`+checkbreach <email>` - Vérifier breach\n"
+                    "`+getdomain <domaine>` - Info domaine\n"
+                    "`+apitest <api>` - Tester une API"
+                ),
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚙️ Configuration",
+                value="Définissez vos clés API dans le fichier `.env`:\n```\nSNUSBASE_API_KEY=votre_clé\nHAVEIBEENPWNED_API_KEY=votre_clé\nDEHASHED_API_KEY=votre_clé\n```",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Erreur apilist: {e}", exc_info=True)
+            await ctx.send(f"❌ Erreur: {str(e)[:200]}")
+    
+    @commands.command(name='apitest')
+    async def api_test(self, ctx, api: str = None):
+        """Teste la connexion à une API OSINT"""
+        try:
+            if not api:
+                available_apis = ['snusbase', 'haveibeenpwned', 'dehashed']
+                await ctx.send(f"❌ Spécifiez une API: {', '.join(available_apis)}")
+                return
+            
+            api = api.lower()
+            if api not in ['snusbase', 'haveibeenpwned', 'dehashed']:
+                await ctx.send(f"❌ API non reconnue: {api}")
+                return
+            
+            status = await ctx.send(f"🔄 Test de {api}...")
+            result = await self.api_manager.test_api(api)
+            
+            embed = discord.Embed(
+                title=f"🔌 Test API: {api}",
+                timestamp=datetime.now()
+            )
+            
+            if result['success']:
                 embed.color = discord.Color.green()
-                embed.description = "✅ **Connexion réussie!**"
-                embed.add_field(name="Status", value=f"Code: {response.status_code}", inline=False)
+                embed.description = "✅ **Connexion réussie**"
+                embed.add_field(name="Status", value=f"Code: {result.get('status', 'OK')}", inline=False)
+                embed.add_field(name="✨ Recommandation", value="L'API est opérationnelle et configurée", inline=False)
             else:
                 embed.color = discord.Color.red()
                 embed.description = "❌ **Connexion échouée**"
-                embed.add_field(name="Status", value=f"Code: {response.status_code}", inline=False)
-                embed.add_field(name="Erreur", value=response.text[:500], inline=False)
-                
+                error_msg = result.get('error', 'Erreur inconnue')
+                embed.add_field(name="Erreur", value=error_msg[:500], inline=False)
+                embed.add_field(
+                    name="💡 Solutions",
+                    value=f"1. Vérifiez votre clé API dans `.env`\n2. Assurez-vous que le service {api} est en ligne\n3. Vérifiez les restrictions de firewall",
+                    inline=False
+                )
+            
+            await status.delete()
             await ctx.send(embed=embed)
             
-        except requests.exceptions.ConnectionError:
-            embed = discord.Embed(
-                title="❌ Erreur de Connexion",
-                description=(
-                    "**Impossible de se connecter à l'API Snusbase**\n\n"
-                    "**Causes possibles:**\n"
-                    "• L'URL de l'API a changé\n"
-                    "• La clé API est invalide/expirée\n"
-                    "• Le service est hors ligne\n"
-                    "• Problème de firewall/proxy\n\n"
-                    "**Solutions:**\n"
-                    "1. Vérifiez l'URL: `api-experimental.snusbase.com`\n"
-                    "2. Vérifiez votre clé API\n"
-                    "3. Contactez le support Snusbase\n"
-                    "4. Utilisez `+checkbreach` en alternative"
-                ),
-                color=discord.Color.red()
-            )
-            await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(f"❌ Erreur: {str(e)}")
+            logger.error(f"Erreur apitest: {e}", exc_info=True)
+            await ctx.send(f"❌ Erreur: {str(e)[:200]}")
 
     @commands.command(name='dbstats')
     async def database_stats(self, ctx):

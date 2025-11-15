@@ -5,124 +5,124 @@ class Commands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name='help')
-    async def help_command(self, ctx):
-        embed = discord.Embed(
-            title="📚 Bot Discord Complet - Commandes",
-            description="**90+ Commandes Disponibles**",
-            color=discord.Color.blue()
-        )
-        
-        embed.add_field(
-            name="🎮 **Basiques**",
-            value="`+hello` • `+ping` • `+say <msg>` • `+avatar [@user]`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📊 **Slash Commands** (Modernes avec /)",
-            value="`/slashhelp` • `/ping` • `/usercard [@user]` • `/leaderboard` • `/about`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="ℹ️ **Informations**",
-            value="`+serverinfo` • `+userinfo [@u]` • `+roleinfo <role>` • `+channelinfo [channel]` • `+stats`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🛡️ **Modération** (Admin)",
-            value="`+clear <n>` • `+kick @user` • `+ban @user` • `+unban <name>` • `+mute @user` • `+unmute @user`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎮 **Interactions Avancées**",
-            value="`+buttons` • `+select` • `+modal` (Buttons, Menus, Modales)",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎭 **Événements & Rôles**",
-            value="`+autoroles <role>` • `+reactionrole <id> <emoji> <role>` • `+welcome` • `+setuplogs`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="👤 **Profils & XP**",
-            value="`+profile [@u]` • `+setbio <bio>` • `+balance [@u]` • `+addbal @user <n>` • `+leaderboard`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="⚙️ **Customisation Serveur** (Admin)",
-            value="`+prefix <new>` • `+setwelcome <msg>` • `+setleave <msg>` • `+setautorole <role>`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="👥 **Invitations**",
-            value="`+invites [@user]` • `+inviteleaderboard` (Tracker d'invitations)",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎫 **Support & Tickets** (Admin)",
-            value="`+ticketsystem` - Créer la base de tickets",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🔐 **Vérification** (Admin)",
-            value="`+setupverification` - Captcha mathématique auto",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎉 **Giveaways** (Admin)",
-            value="`+giveaway <durée> <winners> <prize>` • `+giveaways` • `+endgiveaway <id>`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎨 **Outils Créatifs**",
-            value="`+qrcode <texte>` (QR Code) • `+ascii <texte>` (ASCII Art)",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎲 **Jeux & Plaisir**",
-            value="`+dice` • `+flip` • `+8ball <question>`",
-            inline=False
-        )
-        
-        embed.set_footer(text="✨ Réaction-rôles • Logs complets • XP système • BD SQLite • Prefix personnalisé • Tracker d'invitations")
-        
-        await ctx.send(embed=embed)
+    # @commands.command(name='help')
+    # async def help_command(self, ctx):
+    #     embed = discord.Embed(
+    #         title="📚 Bot Discord Complet - Commandes",
+    #         description="**90+ Commandes Disponibles**",
+    #         color=discord.Color.blue()
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🎮 **Basiques**",
+    #         value="`+hello` • `+ping` • `+say <msg>` • `+avatar [@user]`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="📊 **Slash Commands** (Modernes avec /)",
+    #         value="`/slashhelp` • `/ping` • `/usercard [@user]` • `/leaderboard` • `/about`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="ℹ️ **Informations**",
+    #         value="`+serverinfo` • `+userinfo [@u]` • `+roleinfo <role>` • `+channelinfo [channel]` • `+stats`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🛡️ **Modération** (Admin)",
+    #         value="`+clear <n>` • `+kick @user` • `+ban @user` • `+unban <name>` • `+mute @user` • `+unmute @user`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🎮 **Interactions Avancées**",
+    #         value="`+buttons` • `+select` • `+modal` (Buttons, Menus, Modales)",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🎭 **Événements & Rôles**",
+    #         value="`+autoroles <role>` • `+reactionrole <id> <emoji> <role>` • `+welcome` • `+setuplogs`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="👤 **Profils & XP**",
+    #         value="`+profile [@u]` • `+setbio <bio>` • `+balance [@u]` • `+addbal @user <n>` • `+leaderboard`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="⚙️ **Customisation Serveur** (Admin)",
+    #         value="`+prefix <new>` • `+setwelcome <msg>` • `+setleave <msg>` • `+setautorole <role>`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="👥 **Invitations**",
+    #         value="`+invites [@user]` • `+inviteleaderboard` (Tracker d'invitations)",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🎫 **Support & Tickets** (Admin)",
+    #         value="`+ticketsystem` - Créer la base de tickets",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🔐 **Vérification** (Admin)",
+    #         value="`+setupverification` - Captcha mathématique auto",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🎉 **Giveaways** (Admin)",
+    #         value="`+giveaway <durée> <winners> <prize>` • `+giveaways` • `+endgiveaway <id>`",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🎨 **Outils Créatifs**",
+    #         value="`+qrcode <texte>` (QR Code) • `+ascii <texte>` (ASCII Art)",
+    #         inline=False
+    #     )
+    #
+    #     embed.add_field(
+    #         name="🎲 **Jeux & Plaisir**",
+    #         value="`+dice` • `+flip` • `+8ball <question>`",
+    #         inline=False
+    #     )
+    #
+    #     embed.set_footer(text="✨ Réaction-rôles • Logs complets • XP système • BD SQLite • Prefix personnalisé • Tracker d'invitations")
+    #
+    #     await ctx.send(embed=embed)
 
-    @commands.command(name='hello')
-    async def hello(self, ctx):
-        await ctx.send(f'Bonjour {ctx.author.mention}! 👋')
+    # @commands.command(name='hello')
+    # async def hello(self, ctx):
+    #     await ctx.send(f'Bonjour {ctx.author.mention}! 👋')
 
-    @commands.command(name='say')
-    async def say(self, ctx, *, message):
-        await ctx.send(message)
+    # @commands.command(name='say')
+    # async def say(self, ctx, *, message):
+    #     await ctx.send(message)
 
-    @commands.command(name='ping')
-    async def ping(self, ctx):
-        latence = round(self.bot.latency * 1000)
-        await ctx.send(f'🏓 Pong! Latence: {latence}ms')
+    # @commands.command(name='ping')
+    # async def ping(self, ctx):
+    #     latence = round(self.bot.latency * 1000)
+    #     await ctx.send(f'🏓 Pong! Latence: {latence}ms')
 
-    @commands.command(name='avatar')
-    async def avatar(self, ctx, member: discord.Member = None):
-        member = member or ctx.author
-        embed = discord.Embed(
-            title=f"Avatar de {member}",
-            color=member.color
-        )
-        embed.set_image(url=member.avatar.url if member.avatar else None)
-        await ctx.send(embed=embed)
+    # @commands.command(name='avatar')
+    # async def avatar(self, ctx, member: discord.Member = None):
+    #     member = member or ctx.author
+    #     embed = discord.Embed(
+    #         title=f"Avatar de {member}",
+    #         color=member.color
+    #     )
+    #     embed.set_image(url=member.avatar.url if member.avatar else None)
+    #     await ctx.send(embed=embed)
 
     @commands.command(name='aide')
     async def aide(self, ctx):
