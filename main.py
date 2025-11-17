@@ -58,7 +58,7 @@ bot = commands.Bot(command_prefix=get_prefix, intents=intents, help_command=None
 async def on_ready():
     logger.info(f'✅ Bot connecté: {bot.user}')
     logger.info(f'📊 Serveurs: {len(bot.guilds)} | Utilisateurs: {sum(g.member_count for g in bot.guilds)}')
-    await bot.change_presence(activity=discord.Game(name="Dev by Slender_0001. Use +aide / +help / +helplink Enjoy!"))
+    await bot.change_presence(activity=discord.Game(name="Dev by Slender_0001. +aide pour les commandes"))
     logger.info('✅ Statut défini')
 
 @bot.event
