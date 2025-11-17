@@ -11,6 +11,7 @@ import requests
 app = Flask(__name__)
 bot_instance = None
 notify_lock = Lock()
+click_codes = {}
 
 def init_shortlink_db():
     """Initialise la base de données pour les liens courts et les images trackées"""
