@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import logging
 import sqlite3
 from datetime import datetime
+import threading
+from shortlink_server import run_server
 
 load_dotenv()
 
@@ -148,10 +150,15 @@ def main():
     if not token:
         logger.error('❌ DISCORD_TOKEN non trouvé dans les variables d\'environnement')
         raise ValueError("DISCORD_TOKEN manquant")
-    
+
     logger.info('🚀 Démarrage du bot Discord...')
     logger.info(f'⏰ Heure de démarrage: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
-    
+
+    # Démarrer le serveur Flask dans un thread séparé
+    flask_thread = threading.Thread(target=run_server, args=(bot,), daemon=True)
+    flask_thread.start()
+    logger.info('🌐 Serveur Flask démarré dans un thread séparé')
+
     try:
         bot.run(token)
     except Exception as e:

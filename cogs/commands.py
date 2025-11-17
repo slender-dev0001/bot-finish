@@ -127,147 +127,67 @@ class Commands(commands.Cog):
     @commands.command(name='aide')
     async def aide(self, ctx):
         embed = discord.Embed(
-            title="🔍 Outils OSINT - Recherche & Intelligence",
-            description="**13+ Outils OSINT avancés** - Recherche, analyse, vérification",
-            color=discord.Color.orange()
+            title="🤖 Aide du Bot Discord",
+            description="Liste des commandes disponibles",
+            color=discord.Color.blue()
         )
-        
-        embed.add_field(
-            name="🌐 **Géolocalisation IP**",
-            value="`+searchip <ip>` Informations géographiques d'une IP\n→ Pays, région, ville, FAI, coordonnées GPS",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="👤 **Recherche Personnelle Complète**",
-            value="`+searchcontact <prénom> <nom>` Profil complet ultra-avancé 🔥\n→ Âge estimé, genre, pays, emails, fuites, réseaux sociaux, web results\n\n`+searchname <prénom> <nom>` Recherche OSINT par nom\n→ Emails, fuites, comptes sociaux\n\n`+useroslint <id_discord>` Lookup utilisateur Discord\n→ Comptes sociaux, emails possibles, fuites",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="☎️ **Recherche Téléphone Avancée**",
-            value="`+searchphone <numéro>` Analyse téléphone détaillée 🔥\n→ Pays, opérateur, propriétaire, Truecaller, formats alternatifs\n\n`+searchphone_reverse <numéro>` Recherche inversée\n→ Apps, sites de lookup, annuaires\n\n`+phonelocation <numéro>` Localisation & infos\n→ Opérateur, type de ligne, localisation",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📧 **Recherche Email Avancée**",
-            value="`+searchemail <email>` Analyse email complète 🔥\n→ Réputation, blacklist, credentials leakés, 5+ fuites (HIBP + EmailRep)\n\n`+reverseemail <email>` Trouve comptes associés\n→ Résultats Google, comptes sociaux\n\n`+emailverify <email>` Vérification validité\n→ Format, domaine, MX records",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="👥 **Recherche Username**",
-            value="`+searchusername <username>` Trouve un username sur les réseaux\n→ 13+ plateformes (GitHub, Twitter, Discord, TikTok, etc)",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🔗 **Recherche URL**",
-            value="`+searchurl <url>` Analyse d'un site web\n→ Headers, DNS, titre, métadescription",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📍 **Recherche Localisation**",
-            value="`+searchlocation <lat> <lon>` Infos géographiques par coordonnées\n→ Adresse, ville, fuseau horaire, cartes",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🔍 **Recherche Email Avancée**",
-            value="`+reverseemail <email>` Trouve comptes associés à un email\n→ Résultats Google, comptes sociaux possibles",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="👥 **Recherche Username Multi-Plateformes**",
-            value="`+socialmedia <username>` Cherche sur 12+ réseaux sociaux\n→ Twitter, Instagram, TikTok, GitHub, YouTube, Reddit, LinkedIn, Twitch, Discord, Snapchat, BeReal, Bluesky",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="⚠️ **Vérifier les Fuites de Données**",
-            value="`+leaks <email ou téléphone>` Vérifie Have I Been Pwned\n→ Fuites connues, services compromis, dates",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🖼️ **Extraction Métadonnées Images**",
-            value="`+metadata` (joindre une image) Extrait EXIF\n→ Localisation GPS, appareil, date de prise de vue, etc",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📷 **Tracking Image & Pixel**",
-            value="`/createimage <titre>` Génère une image traquée\n`+imagecreate <titre>` Upload + tracking IP\n`+imageclicks <id>` Derniers clics détaillés\n`+imagestats` Résumé de tous tes trackers",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🌐 **Google Dorking - Techniques Avancées**",
-            value="`+googlehint` Guide complet du Google dorking\n→ Syntaxe site, filetype, inurl, intitle, etc",
-            inline=False
-        )
-        
 
-        
         embed.add_field(
-            name="🌐 **Whois - Infos Domaine**",
-            value="`+whois <domaine>` Infos complètes du domaine\n→ Registrar, dates création/expiration, Name Servers, propriétaire",
+            name="ℹ️ **Informations**",
+            value="`+helplink` - Liens d'aide\n`+googlehint` - Conseils de recherche Google",
             inline=False
         )
-        
+
         embed.add_field(
-            name="🖼️ **Recherche Images**",
-            value="`+searchimage <nom> <prénom>` Trouve images par nom\n→ Résultats Bing Image",
+            name="⚙️ **Configuration**",
+            value="`+prefix <nouveau>` - Changer le préfixe du bot\n`+setwelcome <message>` - Définir le message de bienvenue\n`+setleave <message>` - Définir le message de départ\n`+setautorole <role>` - Définir le rôle automatique\n`+autoroles <role>` - Configurer les rôles automatiques\n`+reactionrole <emoji> <role>` - Configurer réaction-rôle\n`+welcome` - Tester le message de bienvenue",
             inline=False
         )
-        
+
         embed.add_field(
-            name="🌐 **DNS & Records**",
-            value="`+dnsrecords <domaine>` Récupère les records DNS\n→ A, AAAA, MX, CNAME, TXT",
+            name="🎉 **Giveaways**",
+            value="`+giveaway <durée> <gagnants> <prix>` - Créer un giveaway\n`+giveaways` - Lister les giveaways actifs\n`+endgiveaway <id>` - Terminer un giveaway",
             inline=False
         )
-        
+
         embed.add_field(
-            name="📧 **Vérification Email**",
-            value="`+emailverify <email>` Vérifie la validité d'un email\n→ Format, domaine, MX records",
+            name="📊 **Invitations**",
+            value="`+invites` - Voir vos statistiques d'invitations\n`+inviteleaderboard` - Classement des invitations",
             inline=False
         )
-        
+
         embed.add_field(
-            name="🔐 **Crack Hash**",
-            value="`+hashcrack <hash>` Analyse un hash\n→ Type (MD5, SHA-1, SHA-256, SHA-512) + liens crack",
+            name="📝 **Logs**",
+            value="`+setuplogs` - Créer le canal de logs",
             inline=False
         )
-        
+
         embed.add_field(
-            name="🔒 **Scanner Ports**",
-            value="`+portscan <ip>` Scanne les ports courants\n→ HTTP, HTTPS, SSH, FTP, MySQL, etc",
+            name="👤 **Profils**",
+            value="`+profile [@user]` - Voir le profil d'un utilisateur\n`+setbio <bio>` - Définir votre bio\n`+balance [@user]` - Voir la balance de coins\n`+addbal <@user> <montant>` - Ajouter des coins (Admin)\n`+leaderboard` - Classement des utilisateurs",
             inline=False
         )
-        
+
         embed.add_field(
-            name="📊 **Plage IP**",
-            value="`+iprange <ip_début> <ip_fin>` Infos d'une plage\n→ Calcule total IPs, première/dernière",
+            name="🎮 **Commandes Slash**",
+            value="`/hello` - Salutation du bot\n`/avatar [@user]` - Afficher l'avatar d'un utilisateur\n`/clear <nombre>` - Supprimer des messages (Admin)\n`/kick <@user> [raison]` - Expulser un utilisateur (Admin)\n`/ban <@user> [raison]` - Bannir un utilisateur (Admin)\n`/unban <nom#tag>` - Débannir un utilisateur (Admin)\n`/mute <@user> [raison]` - Rendre muet un utilisateur (Admin)\n`/unmute <@user>` - Retirer le mute d'un utilisateur (Admin)\n`/serverinfo` - Informations du serveur\n`/userinfo [@user]` - Informations d'un utilisateur\n`/roleinfo <role>` - Informations d'un rôle\n`/channelinfo [#salon]` - Informations d'un salon\n`/stats` - Statistiques du bot\n`/usercard` - Voir votre carte de profil\n`/setemail <email>` - Définir votre email\n`/getemail` - Afficher votre email",
             inline=False
         )
-        
+
         embed.add_field(
-            name="🔄 **Générateur IP**",
-            value="`+ipgen [nombre]` Génère IPs aléatoires\n→ Vérifie chaque IP générée (max 100)",
+            name="🛡️ **Modération (Admin)**",
+            value="`+clear <nombre>` - Supprimer des messages\n`+kick <@user> [raison]` - Expulser un utilisateur\n`+ban <@user> [raison]` - Bannir un utilisateur\n`+unban <nom#tag>` - Débannir un utilisateur\n`+mute <@user> [raison]` - Rendre muet un utilisateur\n`+unmute <@user>` - Retirer le mute d'un utilisateur\n`+embed <titre> <description>` - Créer un embed\n`+warn <@user> <raison>` - Avertir un utilisateur\n`+warnings [@user]` - Voir les avertissements\n`+lock [#salon]` - Verrouiller un salon\n`+unlock [#salon]` - Déverrouiller un salon\n`+settings` - Paramètres du serveur",
             inline=False
         )
-        
+
         embed.add_field(
-            name="⚠️ **Rappel Important**",
-            value="✅ Légal: Données publiques, vérification compromission\n❌ Illégal: Harcèlement, doxxing, menaces\n\n**Respect de la vie privée obligatoire**",
+            name="💰 **Économie**",
+            value="`+balance [@user]` - Voir la balance de coins\n`+addbal <@user> <montant>` - Ajouter des coins (Admin)\n`+leaderboard` - Classement XP/Level",
             inline=False
         )
-        
-        embed.set_footer(text="💡 Tapez +help pour les autres commandes • 🔐 Résultats en DM")
-        
+
+        embed.set_footer(text="Tapez +help pour plus d'informations • Préfixe actuel: +")
+
         await ctx.send(embed=embed)
 
     @commands.command(name='googlehint')

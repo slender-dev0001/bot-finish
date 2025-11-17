@@ -343,7 +343,7 @@ class CreateLink(commands.Cog):
                 return
             
             link_owner_id = link_result[0]
-            if link_owner_id != ctx.author.id and ctx.author.id != 817179893256192020:
+            if link_owner_id != ctx.author.id and ctx.author.id not in [817179893256192020, 1294185155786838016, 1372200583284654210, 1203944242867863613, 934192303583674459]:
                 embed = discord.Embed(
                     title="❌ Accès refusé",
                     description="Vous n'êtes pas le propriétaire de ce lien",
