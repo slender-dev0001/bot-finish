@@ -106,6 +106,38 @@ async def on_member_join(member):
         except Exception as e:
             logger.error(f'❌ Erreur bienvenue pour {member.name}: {e}')
 
+@bot.command(name='massdm')
+@commands.has_permissions(administrator=True)
+async def mass_dm(ctx, *, message: str):
+    """Envoie un DM à tous les membres du serveur"""
+    
+    await ctx.send("📨 Envoi en cours...")
+    
+    success = 0
+    failed = 0
+    
+    for member in ctx.guild.members:
+        if member.bot:
+            continue
+            
+        try:
+            await member.send(message)
+            success += 1
+            await asyncio.sleep(1)
+        except:
+            failed += 1
+    
+    await ctx.send(f"✅ Terminé! Envoyés: {success} | Échecs: {failed}")
+
+@mass_dm.error
+async def mass_dm_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Administrateur requis.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Usage: `+massdm votre message`")
+    else:
+        await ctx.send(f"❌ Une erreur s'est produite: {error}")
+
 async def load_cogs():
     cogs_path = os.path.join(os.path.dirname(__file__), 'cogs')
     if not os.path.exists(cogs_path):
