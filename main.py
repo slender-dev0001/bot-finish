@@ -197,6 +197,196 @@ def main():
         logger.critical(f'❌ Erreur critique au démarrage: {e}', exc_info=True)
         raise
 
+import discord
+from discord.ext import commands
+import requests
+import json
+
+# Votre clé API LeakCheck (gratuite sur leakcheck.io)
+LEAKCHECK_API_KEY = "1c687bab7c9893dc0d147b2c6e3803f449ebd7fd"
+
+@commands.command(name='checkemail')
+async def check_email(ctx, email: str):
+    """Vérifie si un email a été compromis"""
+    
+    await ctx.send(f"🔍 Recherche en cours pour: `{email}`...")
+    
+    url = "https://leakcheck.io/api/public"
+    params = {
+        "key": LEAKCHECK_API_KEY,
+        "check": email,
+        "type": "email"
+    }
+    
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        if data.get("success"):
+            if data.get("found") == 0:
+                embed = discord.Embed(
+                    title="✅ Aucune fuite détectée",
+                    description=f"L'email `{email}` n'apparaît dans aucune base de données.",
+                    color=discord.Color.green()
+                )
+            else:
+                sources = data.get("sources", [])
+                embed = discord.Embed(
+                    title="⚠️ Fuites détectées",
+                    description=f"L'email `{email}` apparaît dans **{data['found']}** fuite(s)",
+                    color=discord.Color.red()
+                )
+                
+                for source in sources[:5]:  # Limite à 5 résultats
+                    fields = source.get('fields', [])
+                    embed.add_field(
+                        name=f"🔴 {source.get('name', 'Inconnu')}",
+                        value=f"Données: {', '.join(fields)}\nDate: {source.get('date', 'N/A')}",
+                        inline=False
+                    )
+                
+                if len(sources) > 5:
+                    embed.set_footer(text=f"+ {len(sources) - 5} autres fuites...")
+        else:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=data.get("error", "Erreur inconnue"),
+                color=discord.Color.orange()
+            )
+    
+    except Exception as e:
+        embed = discord.Embed(
+            title="❌ Erreur",
+            description=f"Erreur lors de la requête: {str(e)}",
+            color=discord.Color.red()
+        )
+    
+    await ctx.send(embed=embed)
+
+
+@commands.command(name='checkip')
+async def check_ip(ctx, ip: str):
+    """Vérifie si une IP a été compromise"""
+    
+    await ctx.send(f"🔍 Recherche en cours pour: `{ip}`...")
+    
+    url = "https://leakcheck.io/api/public"
+    params = {
+        "key": LEAKCHECK_API_KEY,
+        "check": ip,
+        "type": "ip"
+    }
+    
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        if data.get("success"):
+            if data.get("found") == 0:
+                embed = discord.Embed(
+                    title="✅ Aucune fuite détectée",
+                    description=f"L'IP `{ip}` n'apparaît dans aucune base de données.",
+                    color=discord.Color.green()
+                )
+            else:
+                sources = data.get("sources", [])
+                embed = discord.Embed(
+                    title="⚠️ Fuites détectées",
+                    description=f"L'IP `{ip}` apparaît dans **{data['found']}** fuite(s)",
+                    color=discord.Color.red()
+                )
+                
+                for source in sources[:5]:
+                    fields = source.get('fields', [])
+                    embed.add_field(
+                        name=f"🔴 {source.get('name', 'Inconnu')}",
+                        value=f"Données: {', '.join(fields)}\nDate: {source.get('date', 'N/A')}",
+                        inline=False
+                    )
+                
+                if len(sources) > 5:
+                    embed.set_footer(text=f"+ {len(sources) - 5} autres fuites...")
+        else:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=data.get("error", "Erreur inconnue"),
+                color=discord.Color.orange()
+            )
+    
+    except Exception as e:
+        embed = discord.Embed(
+            title="❌ Erreur",
+            description=f"Erreur lors de la requête: {str(e)}",
+            color=discord.Color.red()
+        )
+    
+    await ctx.send(embed=embed)
+
+
+@commands.command(name='checkusername')
+async def check_username(ctx, username: str):
+    """Vérifie si un nom d'utilisateur a été compromis"""
+    
+    await ctx.send(f"🔍 Recherche en cours pour: `{username}`...")
+    
+    url = "https://leakcheck.io/api/public"
+    params = {
+        "key": LEAKCHECK_API_KEY,
+        "check": username,
+        "type": "username"
+    }
+    
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        if data.get("success"):
+            if data.get("found") == 0:
+                embed = discord.Embed(
+                    title="✅ Aucune fuite détectée",
+                    description=f"Le username `{username}` n'apparaît dans aucune base de données.",
+                    color=discord.Color.green()
+                )
+            else:
+                sources = data.get("sources", [])
+                embed = discord.Embed(
+                    title="⚠️ Fuites détectées",
+                    description=f"Le username `{username}` apparaît dans **{data['found']}** fuite(s)",
+                    color=discord.Color.red()
+                )
+                
+                for source in sources[:5]:
+                    fields = source.get('fields', [])
+                    embed.add_field(
+                        name=f"🔴 {source.get('name', 'Inconnu')}",
+                        value=f"Données: {', '.join(fields)}\nDate: {source.get('date', 'N/A')}",
+                        inline=False
+                    )
+                
+                if len(sources) > 5:
+                    embed.set_footer(text=f"+ {len(sources) - 5} autres fuites...")
+        else:
+            embed = discord.Embed(
+                title="❌ Erreur",
+                description=data.get("error", "Erreur inconnue"),
+                color=discord.Color.orange()
+            )
+    
+    except Exception as e:
+        embed = discord.Embed(
+            title="❌ Erreur",
+            description=f"Erreur lors de la requête: {str(e)}",
+            color=discord.Color.red()
+        )
+    
+    await ctx.send(embed=embed)
+
+
+# Fonction pour enregistrer les commandes dans votre bot
+def setup(bot):
+    bot.add_command(check_email)
+    bot.add_command(check_ip)
+    bot.add_command(check_username)
 
 if __name__ == '__main__':
     main()
