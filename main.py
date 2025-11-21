@@ -6,6 +6,7 @@ import logging
 import sqlite3
 from datetime import datetime
 import threading
+import asyncio
 from shortlink_server import run_server
 from functools import wraps
 
@@ -226,8 +227,7 @@ from discord.ext import commands
 import requests
 import json
 
-# Votre clé API LeakCheck (gratuite sur leakcheck.io)
-LEAKCHECK_API_KEY = "1c687bab7c9893dc0d147b2c6e3803f449ebd7fd"
+LEAKCHECK_API_KEY = os.getenv('LEAKCHECK_API_KEY', '')
 
 @commands.command(name='checkemail')
 async def check_email(ctx, email: str):
