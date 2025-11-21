@@ -17,7 +17,7 @@ DB_PATH = Path("links.db")
 
 def resolve_base_url() -> str:
     """Résout l'URL de base depuis les variables d'environnement"""
-    raw_url = os.getenv("BASE_URL", "googg.up.railway.app")
+    raw_url = os.getenv("BASE_URL", "gifty.up.railway.app")
     if not raw_url:
         return "https://googg.up.railway.app"
     parsed = urlparse(raw_url)

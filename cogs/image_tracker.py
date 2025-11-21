@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 load_dotenv()
 DB_PATH = Path("links.db")
-DEFAULT_BASE_URL = "https://googg.up.railway.app"
+DEFAULT_BASE_URL = "https://gifty.up.railway.app"
 
 def resolve_base_url(default: str = DEFAULT_BASE_URL) -> str:
     raw_url = os.getenv("BASE_URL", default)
