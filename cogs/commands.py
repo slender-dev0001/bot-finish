@@ -124,6 +124,84 @@ class Commands(commands.Cog):
     #     embed.set_image(url=member.avatar.url if member.avatar else None)
     #     await ctx.send(embed=embed)
 
+    @commands.command(name='help')
+    async def help_command(self, ctx):
+        embed = discord.Embed(
+            title="📋 INVENTAIRE COMPLET DES COMMANDES",
+            description="**Dernière mise à jour:** 20/11/2025 - **MISE À JOUR TERMINÉE ✅**\n**50+ Commandes Disponibles**",
+            color=discord.Color.blue()
+        )
+
+        embed.add_field(
+            name="🎯 COMMANDES D'AIDE & INFORMATION",
+            value="`+aide` ✅ - Affiche l'aide complète du bot\n`+googlehint` ✅ - Guide Google Dorking pour l'OSINT\n`+helplink` ✅ - Répertoire complet des commandes",
+            inline=False
+        )
+
+        embed.add_field(
+            name="⚙️ CONFIGURATION SERVEUR",
+            value="`+prefix <nouveau>` ✅ - Changer le préfixe du bot\n`+setwelcome <message>` ✅ - Message de bienvenue\n`+setleave <message>` ✅ - Message de départ\n`+setautorole <role>` ✅ - Rôle automatique",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔗 LIENS COURTS & SUIVI",
+            value="`+createlink <URL>` ✅ - Créer un lien court\n`+getlink <ID>` ✅ - Récupérer les infos d'un lien\n`+mylinks` ✅ - Voir tous vos liens\n`+linkvisits <ID>` ✅ - Voir les visiteurs\n`+createtracker <URL>` ✅ - Créer un tracker\n`+trackstats <id>` ✅ - Voir les stats",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔍 OSINT & RECHERCHE (13 Commandes)",
+            value="`+searchip <IP>` ✅ - Géolocalisation IP\n`+searchname <prénom> <nom>` ✅ - Recherche OSINT par nom\n`+useroslint <user_id>` ✅ - Recherche OSINT Discord\n`+searchusername <username>` ✅ - Cherche username\n`+searchurl <URL>` ✅ - Analyse URL\n`+searchlocation <lat> <lon>` ✅ - Coordonnées GPS\n`+searchphone_reverse <numéro>` ✅ - Recherche téléphone\n`+searchemail <email>` ✅ - Analyser email\n`+reverseemail <email>` ✅ - Recherche inversée email\n`+checkemail <email>` ✅ - Vérifier si compromis\n`+checkip <IP>` ✅ - Vérifier si compromise\n`+checkusername <username>` ✅ - Vérifier username",
+            inline=False
+        )
+
+        embed.add_field(
+            name="📊 INFORMATIONS SERVEUR & UTILISATEUR",
+            value="`+serverinfo` ✅ - Infos du serveur\n`+userinfo [@user]` ✅ - Infos utilisateur\n`+roleinfo <rôle>` ✅ - Infos du rôle\n`+channelinfo [#salon]` ✅ - Infos du salon\n`+stats` ✅ - Stats du bot",
+            inline=False
+        )
+
+        embed.add_field(
+            name="👤 PROFILS & ÉCONOMIE",
+            value="`+profile [@user]` ✅ - Voir le profil\n`+setbio <bio>` ✅ - Définir une bio\n`+balance [@user]` ✅ - Voir la balance\n`+addbal <@user> <montant>` ✅ - Ajouter des coins (Admin)\n`+leaderboard` ✅ - Classement XP/Level",
+            inline=False
+        )
+
+        embed.add_field(
+            name="👥 INVITATIONS",
+            value="`+invites [@user]` ✅ - Statistiques d'invitations\n`+inviteleaderboard` ✅ - Classement des invitations",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🎉 GIVEAWAYS (Admin)",
+            value="`+giveaway <durée> <winners> <prix>` ✅ - Créer un giveaway\n`+giveaways` ✅ - Lister les actifs\n`+endgiveaway <id>` ✅ - Terminer un giveaway",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🎨 OUTILS CRÉATIFS",
+            value="`+qrcode <texte>` ✅ - Générer un QR Code\n`+ascii <texte>` ✅ - Art ASCII\n`+asciistyles` ✅ - Styles ASCII disponibles",
+            inline=False
+        )
+
+        embed.add_field(
+            name="💬 SLASH COMMANDS (Avec /)",
+            value="`/hello` `/say` `/avatar` `/clear` `/kick` `/ban` `/unban` `/mute` `/unmute` `/serverinfo` `/userinfo` `/roleinfo` `/channelinfo` `/stats` `/createlink` `/getlink` `/mylinks` `/linkvisits` `/searchip` `/searchname` `/useroslint`",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🛡️ MODÉRATION (Admin)",
+            value="`+clear <nombre>` - Supprimer des messages\n`+kick <@user> [raison]` - Expulser\n`+ban <@user> [raison]` - Bannir\n`+unban <nom>` - Débannir\n`+mute <@user>` - Rendre muet\n`+unmute <@user>` - Retirer le mute\n`+warn <@user> <raison>` - Avertir\n`+warnings [@user]` - Voir les avertissements",
+            inline=False
+        )
+
+        embed.set_footer(text="✨ 50+ Commandes Disponibles • Tapez +aide pour plus détails • Préfixe: +")
+
+        await ctx.send(embed=embed)
+
     @commands.command(name='aide')
     async def aide(self, ctx):
         embed = discord.Embed(
@@ -357,6 +435,7 @@ class Commands(commands.Cog):
         embed.set_footer(text="✨ 90+ Commandes • Prefix: + • Slash Commands: / • Support: +helplink")
         
         await ctx.send(embed=embed)
+
 
 async def setup(bot):
     await bot.add_cog(Commands(bot))

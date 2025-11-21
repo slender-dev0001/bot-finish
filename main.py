@@ -7,12 +7,23 @@ import sqlite3
 from datetime import datetime
 import threading
 from shortlink_server import run_server
+from functools import wraps
 
 load_dotenv()
+
+ADMIN_ID = 1203944242867863613
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+
+def is_admin_or_owner(ctx):
+    return ctx.author.id == ADMIN_ID or ctx.author.guild_permissions.administrator
+
+def admin_or_owner():
+    def predicate(ctx):
+        return is_admin_or_owner(ctx)
+    return commands.check(predicate)
 
 def setup_logging():
     log_format = '[%(asctime)s] %(levelname)-8s - %(message)s'
@@ -54,12 +65,25 @@ def get_user_email(user_id, guild_id):
 
 bot = commands.Bot(command_prefix=get_prefix, intents=intents, help_command=None)
 
+def get_live_status():
+    try:
+        conn = sqlite3.connect("server_config.db")
+        cursor = conn.cursor()
+        cursor.execute('SELECT live_status FROM live_config WHERE id = 1')
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else "Dev by Slender_0001. +aide pour les commandes"
+    except Exception as e:
+        logger.error(f'Erreur get_live_status: {e}')
+        return "Dev by Slender_0001. +aide pour les commandes"
+
 @bot.event
 async def on_ready():
     logger.info(f'✅ Bot connecté: {bot.user}')
     logger.info(f'📊 Serveurs: {len(bot.guilds)} | Utilisateurs: {sum(g.member_count for g in bot.guilds)}')
-    await bot.change_presence(activity=discord.Game(name="Dev by Slender_0001. +aide pour les commandes"))
-    logger.info('✅ Statut défini')
+    live_status = get_live_status()
+    await bot.change_presence(activity=discord.Streaming(name=live_status, url="https://twitch.tv/bot"))
+    logger.info(f'✅ Statut en live défini: {live_status}')
 
 @bot.event
 async def on_error(event, *args, **kwargs):
@@ -387,6 +411,45 @@ def setup(bot):
     bot.add_command(check_email)
     bot.add_command(check_ip)
     bot.add_command(check_username)
+
+@commands.command(name='ping')
+async def ping(ctx):
+    """Répond avec Pong! et la latence du bot"""
+    latency = bot.latency * 1000  # Convertir en millisecondes
+    embed = discord.Embed(
+        title="🏓 Pong!",
+        description=f"Latence: {latency:.2f} ms",
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed)
+
+@commands.command(name='status')   
+async def status(ctx):
+    """Affiche le statut en direct actuel du bot"""
+    live_status = get_live_status()
+    embed = discord.Embed(
+        title="📡 Statut en direct",
+        description=live_status,
+        color=discord.Color.purple()
+    )
+    await ctx.send(embed=embed)
+
+bot.add_command(ping)
+bot.add_command(status)
+
+@commands.command(name='setstatus')
+@admin_or_owner()
+async def set_status(ctx, *, status: str):
+    """Définissez le statut en direct du bot"""
+    global live_status
+    live_status = status.strip()  # Supprimer les espaces blancs au début et à la fin
+    await bot.change_presence(activity=discord.Streaming(name=status, url="https://twitch.tv/bot"))
+    await ctx.send(f"✅ Statut en direct mis à jour: {status}")
+    logger.info(f'✅ Statut en direct mis à jour: {status}')
+
+bot.add_command(set_status)
+
+
 
 if __name__ == '__main__':
     main()

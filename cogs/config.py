@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import sqlite3
+from utils import admin_or_owner
 
 class ConfigDB:
     def __init__(self):
@@ -21,6 +22,13 @@ class ConfigDB:
                 leave_message TEXT,
                 autorole_id INTEGER,
                 log_channel_id INTEGER
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS live_config (
+                id INTEGER PRIMARY KEY,
+                live_status TEXT DEFAULT 'Dev by Slender_0001. +aide pour les commandes'
             )
         ''')
         
@@ -102,13 +110,28 @@ class ConfigDB:
         conn.close()
         return result[0] if result else None
 
+    def set_live_status(self, status):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR REPLACE INTO live_config (id, live_status) VALUES (1, ?)', (status,))
+        conn.commit()
+        conn.close()
+
+    def get_live_status(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT live_status FROM live_config WHERE id = 1')
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else "Dev by Slender_0001. +aide pour les commandes"
+
 class Config(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = ConfigDB()
 
     @commands.command(name='prefix')
-    @commands.has_permissions(manage_guild=True)
+    @admin_or_owner()
     async def change_prefix(self, ctx, new_prefix):
         if len(new_prefix) > 5:
             await ctx.send("❌ Le prefix est trop long (max 5 caractères)")
@@ -123,7 +146,7 @@ class Config(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name='setwelcome')
-    @commands.has_permissions(manage_guild=True)
+    @admin_or_owner()
     async def set_welcome(self, ctx, *, message):
         self.db.set_welcome_message(ctx.guild.id, message)
         embed = discord.Embed(
@@ -135,7 +158,7 @@ class Config(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name='setleave')
-    @commands.has_permissions(manage_guild=True)
+    @admin_or_owner()
     async def set_leave(self, ctx, *, message):
         self.db.set_leave_message(ctx.guild.id, message)
         embed = discord.Embed(
@@ -146,7 +169,7 @@ class Config(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name='setautorole')
-    @commands.has_permissions(manage_roles=True)
+    @admin_or_owner()
     async def set_autorole(self, ctx, role: discord.Role):
         self.db.set_autorole(ctx.guild.id, role.id)
         embed = discord.Embed(
@@ -154,6 +177,25 @@ class Config(commands.Cog):
             description=f"Les nouveaux membres recevront: {role.mention}",
             color=discord.Color.green()
         )
+        await ctx.send(embed=embed)
+
+    @commands.command(name='setlive')
+    @commands.has_permissions(administrator=True)
+    async def set_live_status(self, ctx, *, description):
+        if len(description) > 128:
+            await ctx.send("❌ La description est trop longue (max 128 caractères)")
+            return
+        
+        self.db.set_live_status(description)
+        
+        await self.bot.change_presence(activity=discord.Streaming(name=description, url="https://twitch.tv/bot"))
+        
+        embed = discord.Embed(
+            title="✅ Statut en Live Défini",
+            description=f"📡 Le bot affiche maintenant: `{description}`",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Status Type", value="🎮 Streaming (En Live)", inline=True)
         await ctx.send(embed=embed)
 
     @commands.Cog.listener()
